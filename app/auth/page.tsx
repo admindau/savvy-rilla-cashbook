@@ -1,7 +1,8 @@
+"use client";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // important for Supabase
 
-"use client";
 import { FormEvent, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
