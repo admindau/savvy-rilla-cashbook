@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect, useMemo, useState } from "react";
