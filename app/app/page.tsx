@@ -1,7 +1,7 @@
-"use client";
-export const dynamic = "force-dynamic";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // important for Supabase
+
+"use client";
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect, useMemo, useState } from "react";
