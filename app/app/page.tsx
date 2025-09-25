@@ -1,7 +1,7 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs"; // important for Supabase
+export const runtime = "nodejs";
 
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
