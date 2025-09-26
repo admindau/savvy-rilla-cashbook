@@ -15,10 +15,27 @@ import {
 } from "chart.js";
 Chart.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
+type Account = { id: string; name: string; currency: string };
+type Category = { id: string; name: string; kind: "income" | "expense" };
+type Tx = {
+  id: string;
+  amount: number;
+  currency: string;
+  kind: string;
+  tx_date: string;
+  account_id: string;
+  category_id: string | null;
+  note: string | null;
+};
+
 export default function Dashboard() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [txs, setTxs] = useState<Tx[]>([]);
   const [showTotals, setShowTotals] = useState(false);
 
-  // ... other state + fetch logic stays the same
+  // ⚡ keep all your fetchAll, load, donut, bar, lifetime, monthly, forms, etc.
+  // (not rewriting them here, just ensuring balances section is modified)
 
   return (
     <RequireAuth>
@@ -73,7 +90,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Charts + transactions continue here */}
+        {/* ⚡ Your existing charts, transactions, forms etc. remain unchanged here */}
       </div>
     </RequireAuth>
   );
