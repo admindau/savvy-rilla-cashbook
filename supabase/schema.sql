@@ -1,3 +1,4 @@
+
 create table if not exists public.accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid(),
@@ -56,12 +57,6 @@ alter table budgets enable row level security;
 alter table recurring_rules enable row level security;
 create policy if not exists "Users own accounts" on accounts for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy if not exists "Users own categories" on categories for all using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy if not exists "Users own transactions" on transactions for all using (user_id = auth.uid());
-create policy if not exists "Users own budgets" on budgets for all using (user_id = auth.uid());
-create policy if not exists "Users own recurring_rules" on recurring_rules for all using (user_id = auth.uid());
-drop view if exists public.monthly_summary;
-create or replace view public.monthly_summary as
-select user_id, date_trunc('month', tx_date)::date as month, currency,
-  sum(case when kind='income' then amount else 0 end) as income,
-  sum(case when kind='expense' then amount else 0 end) as expense
-from public.transactions group by 1,2,3;
+create policy if not exists "Users own transactions" on transactions for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy if not exists "Users own budgets" on budgets for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy if not exists "Users own recurring_rules" on recurring_rules for all using (user_id = auth.uid()) with check (user_id = auth.uid());
