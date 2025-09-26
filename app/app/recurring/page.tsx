@@ -1,7 +1,7 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs"; // important for Supabase
+export const runtime = "nodejs";
 
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
@@ -17,7 +17,7 @@ export default function RecurringPage() {
   const [rules, setRules] = useState<Rule[]>([]);
 
   const fetchAll = async () => {
-    const c = await supabase.from("categories").select("*").neq("kind", "transfer").order("name");
+    const c = await supabase.from("categories").select("*").order("name");
     const a = await supabase.from("accounts").select("*").order("name");
     const r = await supabase.from("recurring_rules").select("*").order("next_run");
     if (!c.error) setCategories(c.data as any);
@@ -40,11 +40,10 @@ export default function RecurringPage() {
   };
 
   const applyRule = async (rule: Rule) => {
-    // Create a transaction for today
+    const kind = categories.find(c=>c.id===rule.category_id)?.kind || "expense";
     const { error } = await supabase.from("transactions").insert({
       account_id: rule.account_id, category_id: rule.category_id, amount: rule.amount, currency: rule.currency,
-      kind: (categories.find(c=>c.id===rule.category_id)?.kind)||"expense",
-      tx_date: new Date().toISOString().slice(0,10), note: rule.note || "Recurring"
+      kind, tx_date: new Date().toISOString().slice(0,10), note: rule.note || "Recurring"
     });
     if (error) alert(error.message); else alert("Created a transaction.");
   };

@@ -7,7 +7,7 @@
   --fg: 245 245 245;
 }
 
-html, body, #__next { height: 100%; }
+html, body { height: 100%; }
 body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
 .container { @apply max-w-6xl mx-auto px-4; }
 .card { @apply bg-white/5 rounded-2xl p-6 shadow-lg border border-white/10; }

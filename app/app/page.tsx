@@ -49,13 +49,7 @@ export default function Dashboard() {
     const labels = Array.from(totals.keys());
     const income = labels.map(l => totals.get(l)!.income);
     const expense = labels.map(l => totals.get(l)!.expense);
-    return {
-      labels,
-      datasets: [
-        { label: "Income", data: income },
-        { label: "Expense", data: expense },
-      ]
-    };
+    return { labels, datasets: [{ label: "Income", data: income }, { label: "Expense", data: expense }] };
   }, [totals]);
 
   const addAccount = async (form: FormData) => {

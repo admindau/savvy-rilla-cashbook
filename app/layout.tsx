@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Savvy Rilla Cashbook",
-  description: "Track income and expenses with ease."
+  description: "Track income & expenses across SSP/USD/KES"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +17,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="font-semibold text-lg">Savvy Rilla Cashbook</Link>
             <nav className="ml-auto flex items-center gap-4">
               <Link href="/app" className="btn">Open App</Link>
-              <Link href="https://cashbook.savvyrilla.tech" className="text-white/70 hover:text-white">Subdomain</Link>
             </nav>
           </div>
         </header>

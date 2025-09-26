@@ -20,7 +20,7 @@ export default function BudgetsPage() {
 
   const fetchAll = async () => {
     const c = await supabase.from("categories").select("*").eq("kind","expense").order("name");
-    const b = await supabase.from("budgets").select("*").like("month", month + "%");
+    const b = await supabase.from("budgets").select("*").gte("month", month + "-01").lte("month", month + "-31");
     const start = month + "-01";
     const end = new Date(new Date(start).getFullYear(), new Date(start).getMonth()+1, 0).toISOString().slice(0,10);
     const t = await supabase.from("transactions").select("category_id, amount, kind, currency").gte("tx_date", start).lte("tx_date", end);
@@ -67,12 +67,12 @@ export default function BudgetsPage() {
         <div className="grid md:grid-cols-2 gap-3">
           {budgets.map(b => {
             const spent = progress[b.category_id] || 0;
-            const pct = Math.min(100, Math.round(100*spent/Number(b.limit_amount)));
+            const pct = Math.min(100, Math.round(100*spent/Number(b.limit_amount||1)));
             return (
               <div key={b.id} className="card">
                 <div className="flex justify-between">
                   <div className="font-semibold">{categories.find(c=>c.id===b.category_id)?.name}</div>
-                  <div className="text-white/70">{fmt(Number(b.limit_amount), b.currency)}</div>
+                  <div className="text-white/70">{fmt(Number(b.limit_amount||0), b.currency)}</div>
                 </div>
                 <div className="h-2 bg-white/10 rounded mt-3 overflow-hidden">
                   <div className="h-full bg-primary" style={{ width: pct + "%" }} />

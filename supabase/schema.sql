@@ -1,4 +1,4 @@
--- Supabase SQL schema for Savvy Rilla Cashbook
+-- Savvy Rilla Cashbook schema (Supabase)
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -29,10 +29,10 @@ create table if not exists public.transactions (
   user_id uuid references auth.users(id) on delete cascade,
   account_id uuid references public.accounts(id) on delete cascade,
   category_id uuid references public.categories(id),
-  amount numeric(18,2) not null, -- positive numbers; use kind to determine +/-
+  amount numeric(18,2) not null,
   kind text not null check (kind in ('income','expense','transfer')),
   currency text not null check (currency in ('SSP','USD','KES')),
-  tx_date date not null,
+  tx_date date not null default current_date,
   note text,
   created_at timestamptz default now()
 );
@@ -41,7 +41,7 @@ create table if not exists public.budgets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade,
   category_id uuid references public.categories(id),
-  month date not null, -- use first day of month
+  month date not null,
   limit_amount numeric(18,2) not null,
   currency text not null check (currency in ('SSP','USD','KES')),
   created_at timestamptz default now(),
@@ -70,37 +70,26 @@ alter table transactions enable row level security;
 alter table budgets enable row level security;
 alter table recurring_rules enable row level security;
 
-create policy "Users can manage their profile"
-on profiles for all
-using (id = auth.uid())
-with check (id = auth.uid());
+create policy "Users manage their profile" on profiles for all
+using (id = auth.uid()) with check (id = auth.uid());
 
-create policy "Users can CRUD own rows"
-on accounts for all
-using (user_id = auth.uid())
-with check (user_id = auth.uid());
+create policy "Users own accounts" on accounts for all
+using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-create policy "Users can CRUD own rows"
-on categories for all
-using (user_id = auth.uid())
-with check (user_id = auth.uid());
+create policy "Users own categories" on categories for all
+using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-create policy "Users can CRUD own rows"
-on transactions for all
-using (user_id = auth.uid())
-with check (user_id = auth.uid());
+create policy "Users own transactions" on transactions for all
+using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-create policy "Users can CRUD own rows"
-on budgets for all
-using (user_id = auth.uid())
-with check (user_id = auth.uid());
+create policy "Users own budgets" on budgets for all
+using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-create policy "Users can CRUD own rows"
-on recurring_rules for all
-using (user_id = auth.uid())
-with check (user_id = auth.uid());
+create policy "Users own recurring_rules" on recurring_rules for all
+using (user_id = auth.uid()) with check (user_id = auth.uid());
 
--- Helpful views
+-- Monthly summary view
+drop view if exists public.monthly_summary;
 create or replace view public.monthly_summary as
 select
   user_id,

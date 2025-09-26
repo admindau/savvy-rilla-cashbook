@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
 export default function RequireAuth({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const [ready, setReady] = useState(false);
+  const router = useRouter();
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.replace("/auth");
