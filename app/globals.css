@@ -4,12 +4,11 @@
 
 body {
   @apply text-white;
-  background: radial-gradient(80% 100% at 0% 0%, #0ea5e933 0%, transparent 60%),
-              radial-gradient(80% 100% at 100% 0%, #a78bfa33 0%, transparent 60%),
-              radial-gradient(120% 120% at 50% 100%, #22d3ee33 0%, transparent 60%),
-              linear-gradient(120deg, #0b1020, #0a0f1e, #0e1b2a);
-  background-size: 300% 300%;
-  animation: gradient 12s ease infinite;
+  background-color: #000000;
+  background-image:
+    radial-gradient(60% 100% at 0% 0%, rgba(14,165,233,0.15) 0%, transparent 60%),
+    radial-gradient(60% 100% at 100% 0%, rgba(167,139,250,0.15) 0%, transparent 60%);
+  background-size: cover;
   min-height: 100dvh;
 }
 

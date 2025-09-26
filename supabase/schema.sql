@@ -1,5 +1,3 @@
--- Savvy Rilla Cashbook v3.3 Futuristic Edition schema
-
 create table if not exists public.accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid(),
@@ -21,7 +19,7 @@ create table if not exists public.categories (
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid(),
-  account_id uuid references public.accounts(id) on delete cascade,
+  account_id uuid not null references public.accounts(id) on delete cascade,
   category_id uuid references public.categories(id),
   amount numeric(18,2) not null,
   kind text not null check (kind in ('income','expense','transfer')),
