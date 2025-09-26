@@ -1,9 +1,1 @@
-export const palette = [
-  "#22d3ee","#a78bfa","#fb7185","#34d399","#f59e0b","#f472b6","#84cc16","#e879f9","#f97316","#2dd4bf","#f43f5e","#10b981"
-];
-export const paletteByIndex = (i: number) => palette[i % palette.length];
-export function colorForId(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h*31 + id.charCodeAt(i)) >>> 0;
-  return paletteByIndex(h);
-}
+export const palette=['#22d3ee','#a78bfa','#fb7185','#34d399','#f59e0b','#f472b6','#84cc16','#e879f9','#f97316','#2dd4bf','#f43f5e','#10b981']; export const paletteByIndex=(i:number)=>palette[i%palette.length]; export function colorForId(id:string){let h=0; for(let i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0; return paletteByIndex(h);} 

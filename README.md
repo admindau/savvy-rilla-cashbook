@@ -1,21 +1,14 @@
-# Savvy Rilla Cashbook v3.3 — Futuristic Edition (Immaculate)
-- Full dashboard (search, colorful charts w/ legends, balances cards, forms)
-- Header: user email (pill) + logout icon
-- Explicit `user_id` inserts via `insertWithUser` (console logging)
-- Budgets: colorful bars + legend
-- Recurring: add/apply rules; uses `insertWithUser`
-- Animated gradient background + glassmorphism + neon accents
-- Pulse glow loader replaces all 'Loading…' placeholders
-- RLS schema in `supabase/schema.sql`
+# Savvy Rilla Cashbook v3.4.1 — Futuristic Auth Edition
+
+- Email + password auth (signup confirmation, login, password reset)
+- Black + subtle gradient accents, pulse glow loader
+- Dashboard, Budgets, Recurring wired in
+- `supabase/schema.sql` (clean) and `supabase/schema_patch.sql` (migration) included
 
 ## Setup
-1) Copy `.env.example` → `.env.local` and fill Supabase vars.
-2) Run SQL in `supabase/schema.sql` (tables + RLS + view).
-3) Install & run:
-```
-npm i
-npm run dev
-```
+1) Copy `.env.example` → `.env.local`, fill `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+2) Supabase → Auth → Email: enable, confirm email ON; Redirect URLs include `/auth/reset` (local + prod)
+3) `npm i` then `npm run dev`
 
-If you see RLS issues, open DevTools and confirm you see:
-`InsertWithUser: <table> for user <uuid>` before inserts.
+## Deploy
+Add env vars in Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_DEFAULT_CURRENCY`

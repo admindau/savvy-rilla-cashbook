@@ -1,43 +1,10 @@
-"use client"; export const dynamic = "force-dynamic"; export const runtime = "nodejs";
-import RequireAuth from "@/components/RequireAuth"; import { supabase } from "@/lib/supabaseClient"; import { insertWithUser } from "@/lib/withUserInsert";
-import { useEffect, useState } from "react";
-type Category = { id: string; name: string; kind: "income"|"expense" }; type Account = { id: string; name: string; currency: string; };
-type Rule = { id: string; category_id: string; account_id: string; amount: number; currency: string; interval: string; next_run: string; note?: string; };
-export default function RecurringPage() {
-  const [categories, setCategories] = useState<Category[]>([]); const [accounts, setAccounts] = useState<Account[]>([]); const [rules, setRules] = useState<Rule[]>([]);
-  const fetchAll = async () => { const c = await supabase.from("categories").select("*").order("name");
-    const a = await supabase.from("accounts").select("*").order("name"); const r = await supabase.from("recurring_rules").select("*").order("next_run");
-    if (!c.error) setCategories(c.data as any); if (!a.error) setAccounts(a.data as any); if (!r.error) setRules(r.data as any); };
-  useEffect(() => { fetchAll(); }, []);
-  const addRule = async (form: FormData) => { const category_id = String(form.get("category_id")); const account_id = String(form.get("account_id"));
-    const amount = Number(form.get("amount")); const currency = String(form.get("currency")); const interval = String(form.get("interval")); const next_run = String(form.get("next_run")); const note = String(form.get("note")||"");
-    const kind = categories.find(c=>c.id===category_id)?.kind || "expense"; const { error } = await insertWithUser("recurring_rules", { category_id, account_id, amount, currency, interval, next_run, note, kind });
-    if (error) alert((error as any).message); else fetchAll(); };
-  const applyRule = async (rule: Rule) => { const kind = categories.find(c=>c.id===rule.category_id)?.kind || "expense";
-    const { error } = await insertWithUser("transactions", { account_id: rule.account_id, category_id: rule.category_id, amount: rule.amount, currency: rule.currency, kind, tx_date: new Date().toISOString().slice(0,10), note: rule.note || "Recurring" });
-    if (error) alert((error as any).message); else alert("Created a transaction."); };
-  return (<RequireAuth>
-    <div className="grid gap-6"><h1 className="text-2xl font-semibold">Recurring</h1>
-      <div className="card"><h2 className="font-semibold mb-2">Add Rule</h2>
-        <form action={addRule} className="grid md:grid-cols-6 gap-2">
-          <select name="category_id" className="input">{categories.map(c => <option key={c.id} value={c.id}>{c.name} ({c.kind})</option>)}</select>
-          <select name="account_id" className="input">{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-          <input name="amount" type="number" step="0.01" className="input" placeholder="Amount" required />
-          <select name="currency" className="input"><option>SSP</option><option>USD</option><option>KES</option></select>
-          <select name="interval" className="input"><option>monthly</option><option>weekly</option><option>quarterly</option><option>yearly</option></select>
-          <input name="next_run" type="date" className="input" required />
-          <input name="note" className="input md:col-span-6" placeholder="Note (optional)" />
-          <button className="btn md:col-span-6" type="submit">Save</button>
-        </form>
-      </div>
-      {rules.length === 0 ? (<div className="card text-white/70">No recurring rules yet — add one above.</div>) :
-        (<div className="grid md:grid-cols-2 gap-3">
-          {rules.map(r => (<div key={r.id} className="card"><div className="flex justify-between items-center">
-              <div><div className="font-semibold">{categories.find(c=>c.id===r.category_id)?.name}</div><div className="text-white/60 text-sm">Every {r.interval} • Next {r.next_run}</div></div>
-              <button className="btn" onClick={()=>applyRule(r)}>Apply Now</button>
-            </div></div>))}
-        </div>)}
-    </div>
-  </RequireAuth>);
-}
-
+"use client";
+import RequireAuth from '@/components/RequireAuth'; import { supabase } from '@/lib/supabaseClient'; import { useEffect, useState, FormEvent } from 'react'; import { currencies } from '@/lib/format';
+type Rule={id:string; category_id:string|null; account_id:string|null; kind:'income'|'expense'; amount:number; currency:string; interval:'weekly'|'monthly'|'quarterly'|'yearly'; next_run:string; note:string|null};
+type Sel={id:string; name:string};
+export default function Recurring(){ const [rules,setRules]=useState<Rule[]>([]); const [cats,setCats]=useState<Sel[]>([]); const [accs,setAccs]=useState<Sel[]>([]); const [msg,setMsg]=useState<string|null>(null);
+  const fetchAll=async()=>{ const r=await supabase.from('recurring_rules').select('*').order('next_run'); const c=await supabase.from('categories').select('id,name').order('name'); const a=await supabase.from('accounts').select('id,name').order('name'); if(!r.error) setRules(r.data||[]); if(!c.error) setCats(c.data||[]); if(!a.error) setAccs(a.data||[]); };
+  useEffect(()=>{ fetchAll(); },[]);
+  const addRule=async(e:FormEvent)=>{ e.preventDefault(); setMsg(null); const fd=new FormData(e.target as HTMLFormElement); const payload:any={ category_id:String(fd.get('category_id'))||null, account_id:String(fd.get('account_id'))||null, kind:String(fd.get('kind')), amount:Number(fd.get('amount')), currency:String(fd.get('currency')), interval:String(fd.get('interval')), next_run:String(fd.get('next_run')), note:String(fd.get('note')||'')||null }; const {error}=await supabase.from('recurring_rules').insert(payload); if(error) setMsg(error.message); else { (e.target as HTMLFormElement).reset(); fetchAll(); } };
+  const applyRule=async(id:string)=>{ setMsg(null); const r=rules.find(x=>x.id===id); if(!r) return; const { error } = await supabase.from('transactions').insert({ account_id: r.account_id, category_id: r.category_id, amount: r.amount, currency: r.currency, kind: r.kind, tx_date: new Date().toISOString().slice(0,10), note: r.note }); if(error) setMsg(error.message); else setMsg('Applied!'); };
+  return (<RequireAuth><div className='grid gap-6'><div className='card'><h2 className='font-semibold mb-2'>Add Recurring Rule</h2><form onSubmit={addRule} className='grid md:grid-cols-3 gap-2'><select name='account_id' className='input'><option value=''>Any account</option>{accs.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><select name='category_id' className='input'><option value=''>Uncategorized</option>{cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><div className='grid grid-cols-2 gap-2'><select name='kind' className='input'><option>expense</option><option>income</option></select><select name='currency' className='input'>{(currencies as any).map((c:string)=><option key={c}>{c}</option>)}</select></div><div className='grid grid-cols-2 gap-2'><input name='amount' className='input' type='number' step='0.01' placeholder='Amount' required/><select name='interval' className='input'><option>monthly</option><option>weekly</option><option>quarterly</option><option>yearly</option></select></div><input name='next_run' className='input' type='date' defaultValue={new Date().toISOString().slice(0,10)}/><input name='note' className='input' placeholder='Note (optional)'/><button className='btn'>Save</button></form></div><div className='card'><h2 className='font-semibold mb-2'>Existing Rules</h2>{rules.length===0? <div className='text-white/70'>No rules yet.</div> : <div className='table'>{rules.map(r=>(<div key={r.id} className='grid md:grid-cols-8 gap-2 py-2 border-b border-white/10'><div>{r.next_run}</div><div>{r.kind}</div><div>{r.amount.toFixed(2)}</div><div>{r.currency}</div><div className='truncate'>{cats.find(c=>c.id===r.category_id)?.name||'—'}</div><div className='truncate'>{accs.find(a=>a.id===r.account_id)?.name||'—'}</div><div className='truncate'>{r.note||''}</div><div><button className='btn' onClick={()=>applyRule(r.id)}>Apply</button></div></div>))}</div>}</div>{msg && <div className='card'>{msg}</div>}</div></RequireAuth>); }
