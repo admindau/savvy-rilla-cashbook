@@ -2,11 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: 18 18 18;
-  --fg: 245 245 245;
-}
-
+:root { --bg: 18 18 18; --fg: 245 245 245; }
 html, body { height: 100%; }
 body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
 .container { @apply max-w-6xl mx-auto px-4; }
@@ -17,3 +13,4 @@ body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
 .table { @apply w-full text-sm; }
 .table th, .table td { @apply px-3 py-2 border-b border-white/10; }
 .badge { @apply text-xs px-2 py-1 rounded-full bg-white/10; }
+.legend-dot { display:inline-block; width:10px; height:10px; border-radius:9999px; margin-right:6px; }

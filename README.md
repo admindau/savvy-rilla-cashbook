@@ -1,28 +1,26 @@
-# Savvy Rilla Cashbook
+# Savvy Rilla Cashbook v3
 
-Next.js 14 + Supabase + Tailwind cashbook with SSP/USD/KES, budgets, recurring entries, and charts.
+- Next.js 14 + Supabase + Tailwind + Chart.js
+- RLS-friendly inserts via `user_id default auth.uid()`
+- Search on transactions
+- Colorful Donut & Bar charts with legends
+- Lifetime & Monthly balances (per currency) as cards
+- Budgets page with colorful per-category bars + legend
+- Header cleanup (no "Open App")
 
-## Setup
-1. Create a Supabase project → copy Project URL & anon key.
-2. In Supabase SQL Editor, run `supabase/schema.sql`.
-3. In Auth → Providers, enable Email (magic link/OTP).
-4. In Auth → URL config, add your Vercel URL and http://localhost:3000.
+## Supabase
+Run `supabase/schema.sql` in SQL Editor. Enable Auth → Email OTP; set URL redirects.
 
-## Dev
-```bash
-npm i
-cp .env.example .env.local
-# fill NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
-npm run dev
+## Env
+```
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_DEFAULT_CURRENCY=SSP
 ```
 
-## Deploy
-- Push to GitHub → Import to Vercel (framework: Next.js)
-- Set env vars in Vercel (same as above)
-- Deploy
-
-Pages:
-- `/auth` Sign-in
-- `/app` Dashboard
-- `/app/budgets` Budgets
-- `/app/recurring` Recurring rules
+## Dev
+```
+npm i
+cp .env.example .env.local
+npm run dev
+```

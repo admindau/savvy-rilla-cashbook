@@ -6,10 +6,11 @@ export const runtime = "nodejs";
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect, useMemo, useState } from "react";
-import { fmt } from "@/lib/format";
-import { Bar } from "react-chartjs-2";
-import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from "chart.js";
-ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+import { fmt, currencies } from "@/lib/format";
+import { colorForId, palette, paletteByIndex } from "@/lib/palette";
+import { Bar, Doughnut } from "react-chartjs-2";
+import { Chart as ChartJS, BarElement, ArcElement, CategoryScale, LinearScale, Tooltip, Legend } from "chart.js";
+ChartJS.register(BarElement, ArcElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 type Account = { id: string; name: string; currency: string; balance: number; };
 type Category = { id: string; name: string; kind: "income"|"expense"; color?: string; };
@@ -18,39 +19,90 @@ type Tx = { id: string; account_id: string; category_id: string|null; amount: nu
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [txs, setTxs] = useState<Tx[]>([]);
+  const [txsMonth, setTxsMonth] = useState<Tx[]>([]);
+  const [txsAll, setTxsAll] = useState<Tx[]>([]);
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0,7));
+  const [query, setQuery] = useState<string>("");
 
   const fetchAll = async () => {
     const a = await supabase.from("accounts").select("*").order("created_at", { ascending: true });
     const c = await supabase.from("categories").select("*").order("created_at", { ascending: true });
     const start = month + "-01";
     const end = new Date(new Date(start).getFullYear(), new Date(start).getMonth()+1, 0).toISOString().slice(0,10);
-    const t = await supabase.from("transactions").select("*").gte("tx_date", start).lte("tx_date", end).order("tx_date", { ascending: false });
+    const tMonth = await supabase.from("transactions").select("*").gte("tx_date", start).lte("tx_date", end).order("tx_date", { ascending: false });
+    const tAll = await supabase.from("transactions").select("*").order("tx_date", { ascending: false });
     if (!a.error) setAccounts(a.data as any);
     if (!c.error) setCategories(c.data as any);
-    if (!t.error) setTxs(t.data as any);
+    if (!tMonth.error) setTxsMonth(tMonth.data as any);
+    if (!tAll.error) setTxsAll(tAll.data as any);
   };
-
   useEffect(() => { fetchAll(); }, [month]);
 
-  const totals = useMemo(() => {
-    const byCur = new Map<string,{ income:number, expense:number }>();
-    txs.forEach(tx => {
-      const entry = byCur.get(tx.currency) ?? { income:0, expense:0 };
-      if (tx.kind === "income") entry.income += Number(tx.amount);
-      if (tx.kind === "expense") entry.expense += Number(tx.amount);
-      byCur.set(tx.currency, entry);
+  // Totals per currency (month)
+  const totalsMonth = useMemo(() => {
+    const res = new Map<string,{ income:number, expense:number }>();
+    txsMonth.forEach(tx => {
+      const cur = res.get(tx.currency) ?? { income:0, expense:0 };
+      if (tx.kind === "income") cur.income += Number(tx.amount);
+      if (tx.kind === "expense") cur.expense += Number(tx.amount);
+      res.set(tx.currency, cur);
     });
-    return byCur;
-  }, [txs]);
+    return res;
+  }, [txsMonth]);
 
-  const chartData = useMemo(() => {
-    const labels = Array.from(totals.keys());
-    const income = labels.map(l => totals.get(l)!.income);
-    const expense = labels.map(l => totals.get(l)!.expense);
-    return { labels, datasets: [{ label: "Income", data: income }, { label: "Expense", data: expense }] };
-  }, [totals]);
+  // Totals per currency (lifetime)
+  const totalsAll = useMemo(() => {
+    const res = new Map<string,{ income:number, expense:number }>();
+    txsAll.forEach(tx => {
+      const cur = res.get(tx.currency) ?? { income:0, expense:0 };
+      if (tx.kind === "income") cur.income += Number(tx.amount);
+      if (tx.kind === "expense") cur.expense += Number(tx.amount);
+      res.set(tx.currency, cur);
+    });
+    return res;
+  }, [txsAll]);
+
+  // Donut: month expenses by category
+  const donutData = useMemo(() => {
+    const expenseByCat = new Map<string, number>();
+    txsMonth.forEach(tx => {
+      if (tx.kind === "expense" && tx.category_id) {
+        const key = tx.category_id;
+        expenseByCat.set(key, (expenseByCat.get(key)||0) + Number(tx.amount));
+      }
+    });
+    const labels = Array.from(expenseByCat.keys()).map(id => categories.find(c=>c.id===id)?.name || "Uncategorized");
+    const data = Array.from(expenseByCat.values());
+    const bg = Array.from(expenseByCat.keys()).map(id => colorForId(id));
+    return { labels, datasets: [{ label: "Expenses", data, backgroundColor: bg }] };
+  }, [txsMonth, categories]);
+
+  // Search filter (client-side) over month txs
+  const filteredTx = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return txsMonth;
+    return txsMonth.filter(tx => {
+      const acc = accounts.find(a=>a.id===tx.account_id)?.name?.toLowerCase() || "";
+      const cat = categories.find(c=>c.id===tx.category_id||"")?.name?.toLowerCase() || "";
+      const note = (tx.note||"").toLowerCase();
+      const date = tx.tx_date.toString();
+      return acc.includes(q) || cat.includes(q) || note.includes(q) || date.includes(q) || tx.kind.toLowerCase().includes(q) || tx.currency.toLowerCase().includes(q);
+    });
+  }, [txsMonth, accounts, categories, query]);
+
+  // Bar: color per currency
+  const barLabels = currencies as unknown as string[];
+  const incomeByCur = barLabels.map(cur => (totalsMonth.get(cur)?.income)||0);
+  const expenseByCur = barLabels.map(cur => (totalsMonth.get(cur)?.expense)||0);
+  const barData = {
+    labels: barLabels,
+    datasets: [
+      { label: "Income", data: incomeByCur, backgroundColor: barLabels.map((_,i)=>paletteByIndex(i)) },
+      { label: "Expense", data: expenseByCur, backgroundColor: barLabels.map((_,i)=>paletteByIndex(i+3)) }
+    ],
+  };
+
+  const chartOptions = { plugins: { legend: { display: true } } };
 
   const addAccount = async (form: FormData) => {
     const name = String(form.get("name"));
@@ -86,31 +138,51 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <div className="flex items-center gap-2">
+            <input className="input" type="search" placeholder="Search transactions…" value={query} onChange={e=>setQuery(e.target.value)} />
             <input className="input" type="month" value={month} onChange={e=>setMonth(e.target.value)} />
             <button className="btn" onClick={signOut}>Sign out</button>
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          {[...totals.entries()].map(([cur, v]) => (
-            <div key={cur} className="card">
-              <div className="text-sm text-white/60">{cur}</div>
-              <div className="text-3xl font-semibold mt-1">{fmt(v.income - v.expense, cur)}</div>
-              <div className="text-white/60 mt-2">Income {fmt(v.income, cur)} • Expense {fmt(v.expense, cur)}</div>
-            </div>
-          ))}
-          <div className="md:col-span-3 card">
-            <Bar data={chartData} />
+        {/* Donut above New Account section */}
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold mb-2">Expenses by Category (This Month)</h2>
+            {/* Legend is handled by Chart.js; we also show a color key grid */}
+          </div>
+          <Doughnut data={donutData} options={chartOptions} />
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-white/80">
+            {donutData.labels.map((label, i) => (
+              <div key={i}><span className="legend-dot" style={{backgroundColor: (donutData.datasets[0] as any).backgroundColor[i]}}></span>{label}</div>
+            ))}
           </div>
         </div>
 
+        {/* Totals cards and colorful bar chart */}
+        <div className="grid md:grid-cols-3 gap-4">
+          {barLabels.map((cur, i) => {
+            const v = totalsMonth.get(cur) || { income:0, expense:0 };
+            return (
+              <div key={cur} className="card">
+                <div className="text-sm text-white/60">{cur}</div>
+                <div className="text-3xl font-semibold mt-1">{fmt(v.income - v.expense, cur)}</div>
+                <div className="text-white/60 mt-2">Income {fmt(v.income, cur)} • Expense {fmt(v.expense, cur)}</div>
+              </div>
+            );
+          })}
+          <div className="md:col-span-3 card">
+            <Bar data={barData} options={chartOptions} />
+          </div>
+        </div>
+
+        {/* Forms */}
         <div className="grid md:grid-cols-3 gap-4">
           <div className="card">
             <h2 className="font-semibold mb-2">New Account</h2>
             <form action={addAccount} className="space-y-2">
               <input name="name" className="input" placeholder="e.g. Wallet" required />
               <select name="currency" className="input" defaultValue={process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || "SSP"}>
-                <option>SSP</option><option>USD</option><option>KES</option>
+                {currencies.map(c => <option key={c}>{c}</option>)}
               </select>
               <button className="btn w-full" type="submit">Add</button>
             </form>
@@ -129,7 +201,12 @@ export default function Dashboard() {
             </form>
             <h3 className="mt-4 text-white/70">Categories</h3>
             <ul className="mt-1 space-y-1">
-              {categories.map(c => <li key={c.id} className="flex justify-between"><span>{c.name}</span><span className="badge">{c.kind}</span></li>)}
+              {categories.map((c, idx) => (
+                <li key={c.id} className="flex justify-between">
+                  <span><span className="legend-dot" style={{backgroundColor: colorForId(c.id)}}></span>{c.name}</span>
+                  <span className="badge">{c.kind}</span>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -148,7 +225,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-2">
                 <input name="amount" className="input" type="number" step="0.01" placeholder="Amount" required />
                 <select name="currency" className="input">
-                  <option>SSP</option><option>USD</option><option>KES</option>
+                  {currencies.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <input name="tx_date" className="input" type="date" required />
@@ -158,12 +235,47 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Balances section (cards) */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="card">
+            <h2 className="font-semibold mb-2">Monthly Balance (Income − Expense)</h2>
+            <div className="grid grid-cols-3 gap-3">
+              {currencies.map((cur, i) => {
+                const v = totalsMonth.get(cur) || { income:0, expense:0 };
+                const bal = v.income - v.expense;
+                return (
+                  <div key={cur} className="card">
+                    <div className="text-sm text-white/60">{cur}</div>
+                    <div className="text-2xl font-semibold">{fmt(bal, cur)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="card">
+            <h2 className="font-semibold mb-2">Lifetime Balance (Income − Expense)</h2>
+            <div className="grid grid-cols-3 gap-3">
+              {currencies.map((cur, i) => {
+                const v = totalsAll.get(cur) || { income:0, expense:0 };
+                const bal = v.income - v.expense;
+                return (
+                  <div key={cur} className="card">
+                    <div className="text-sm text-white/60">{cur}</div>
+                    <div className="text-2xl font-semibold">{fmt(bal, cur)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Transactions table */}
         <div className="card">
           <h2 className="font-semibold mb-2">Recent Transactions</h2>
           <table className="table">
             <thead><tr><th>Date</th><th>Account</th><th>Category</th><th>Kind</th><th>Amount</th><th>Currency</th><th>Note</th></tr></thead>
             <tbody>
-              {txs.map(tx => (
+              {filteredTx.map(tx => (
                 <tr key={tx.id}>
                   <td>{tx.tx_date}</td>
                   <td>{accounts.find(a=>a.id===tx.account_id)?.name}</td>

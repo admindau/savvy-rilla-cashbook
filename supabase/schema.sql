@@ -1,4 +1,4 @@
--- Savvy Rilla Cashbook schema (Supabase)
+-- Savvy Rilla Cashbook v3 schema (auth.uid() defaults to satisfy RLS on inserts)
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -8,7 +8,7 @@ create table if not exists public.profiles (
 
 create table if not exists public.accounts (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
   name text not null,
   currency text not null check (currency in ('SSP','USD','KES')),
   balance numeric(18,2) default 0,
@@ -17,7 +17,7 @@ create table if not exists public.accounts (
 
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
   name text not null,
   kind text not null check (kind in ('income','expense')),
   color text,
@@ -26,7 +26,7 @@ create table if not exists public.categories (
 
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
   account_id uuid references public.accounts(id) on delete cascade,
   category_id uuid references public.categories(id),
   amount numeric(18,2) not null,
@@ -39,7 +39,7 @@ create table if not exists public.transactions (
 
 create table if not exists public.budgets (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
   category_id uuid references public.categories(id),
   month date not null,
   limit_amount numeric(18,2) not null,
@@ -50,7 +50,7 @@ create table if not exists public.budgets (
 
 create table if not exists public.recurring_rules (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
   category_id uuid references public.categories(id),
   account_id uuid references public.accounts(id),
   kind text not null check (kind in ('income','expense')),

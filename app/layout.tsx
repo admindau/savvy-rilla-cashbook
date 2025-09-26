@@ -15,9 +15,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="container flex items-center gap-4 py-4">
             <Image src="/logo.png" alt="Savvy Rilla" width={36} height={36} className="rounded" />
             <Link href="/" className="font-semibold text-lg">Savvy Rilla Cashbook</Link>
-            <nav className="ml-auto flex items-center gap-4">
-              <Link href="/app" className="btn">Open App</Link>
-            </nav>
           </div>
         </header>
         <main className="container py-8">{children}</main>

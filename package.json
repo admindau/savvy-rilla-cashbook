@@ -1,6 +1,6 @@
 {
   "name": "savvy-rilla-cashbook",
-  "version": "1.1.0",
+  "version": "3.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -16,7 +16,8 @@
     "next": "14.2.5",
     "react": "18.3.1",
     "react-chartjs-2": "5.2.0",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "tailwindcss": "3.4.10"
   },
   "devDependencies": {
     "@types/node": "20.14.12",
@@ -26,7 +27,6 @@
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.5",
     "postcss": "8.4.45",
-    "tailwindcss": "3.4.10",
     "typescript": "5.5.4"
   }
 }
