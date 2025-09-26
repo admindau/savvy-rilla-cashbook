@@ -12,7 +12,7 @@ export default function BudgetsPage() {
     const start = month + "-01"; const end = new Date(new Date(start).getFullYear(), new Date(start).getMonth()+1, 0).toISOString().slice(0,10);
     const t = await supabase.from("transactions").select("category_id, amount, kind, currency").gte("tx_date", start).lte("tx_date", end);
     if (!c.error) setCategories(c.data as any); if (!b.error) setBudgets(b.data as any);
-    if (!t.error) { const map: Record[string, number] = {} as any;
+    const map: Record<string, number> = {};
       (t.data as Tx[]).forEach(tx => { if (tx.kind === "expense" && tx.category_id) map[tx.category_id] = (map[tx.category_id]||0) + Number(tx.amount); });
       setProgress(map);
     }
