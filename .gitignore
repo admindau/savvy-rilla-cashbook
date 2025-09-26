@@ -1,4 +1,8 @@
 node_modules/
 .next/
+.vercel/
 .env*
+dist/
+*.log
+*.local
 .DS_Store
