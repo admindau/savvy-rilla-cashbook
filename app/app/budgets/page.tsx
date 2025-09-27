@@ -51,13 +51,12 @@ export default function BudgetsPage() {
       return;
     }
 
-    // Budgets filtered by user
+    // Budgets filtered by user + exact month
     const { data: bData } = await supabase
       .from("budgets")
       .select("*")
       .eq("user_id", user_id)
-      .gte("month", month + "-01")
-      .lte("month", month + "-31");
+      .eq("month", month + "-01");
     setBudgets(bData || []);
 
     // Transactions filtered by user
@@ -96,13 +95,18 @@ export default function BudgetsPage() {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
 
-    const { error } = await supabase.from("budgets").insert({
+    if (!user_id) {
+      setToast({ message: "❌ No logged-in user", type: "error" });
+      return;
+    }
+
+    const { error, data } = await supabase.from("budgets").insert([{
       user_id,
       category_id: String(fd.get("category_id")),
       limit_amount: Number(fd.get("limit_amount")),
       currency: String(fd.get("currency")),
       month: month + "-01",
-    });
+    }]).select(); // ✅ verify inserted row
 
     if (error) {
       if (error.message.includes("duplicate key value")) {
@@ -110,6 +114,8 @@ export default function BudgetsPage() {
       } else {
         setToast({ message: error.message, type: "error" });
       }
+    } else if (!data || data.length === 0) {
+      setToast({ message: "❌ Insert failed — no row returned", type: "error" });
     } else {
       setToast({ message: "✅ Budget created" });
       fetchAll();
@@ -120,6 +126,7 @@ export default function BudgetsPage() {
     if (!editingId) return;
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
+    if (!user_id) return;
 
     const { error } = await supabase.from("budgets").update({
       user_id,
@@ -139,6 +146,7 @@ export default function BudgetsPage() {
   const delBudget = async (id: string) => {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
+    if (!user_id) return;
 
     if (!confirm("Delete this budget?")) return;
     const { error } = await supabase.from("budgets").delete().eq("id", id).eq("user_id", user_id);
