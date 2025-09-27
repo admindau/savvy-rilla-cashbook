@@ -15,16 +15,24 @@ type Rule = {
   next_run: string;
   note: string | null;
 };
+type Sel = { id: string; name: string };
 
 export default function Recurring() {
   const [rules, setRules] = useState<Rule[]>([]);
+  const [categories, setCategories] = useState<Sel[]>([]);
+  const [accounts, setAccounts] = useState<Sel[]>([]);
   const [toast, setToast] = useState<{ message: string; type?: "success" | "error" | "warning" } | null>(null);
 
   async function load() {
-    const { data, error } = await supabase.from("recurring_rules").select("*").order("next_run");
-    if (!error) setRules(data || []);
+    const [{ data: rData }, { data: cData }, { data: aData }] = await Promise.all([
+      supabase.from("recurring_rules").select("*").order("next_run"),
+      supabase.from("categories").select("id,name").order("name"),
+      supabase.from("accounts").select("id,name").order("name"),
+    ]);
+    setRules(rData || []);
+    setCategories(cData || []);
+    setAccounts(aData || []);
   }
-
   useEffect(() => { load(); }, []);
 
   const addRule = async (e: FormEvent<HTMLFormElement>) => {
@@ -64,7 +72,8 @@ export default function Recurring() {
     if (rule.interval === "quarterly") next.setMonth(next.getMonth() + 3);
     if (rule.interval === "yearly") next.setFullYear(next.getFullYear() + 1);
 
-    const { error } = await supabase.from("recurring_rules")
+    const { error } = await supabase
+      .from("recurring_rules")
       .update({ next_run: next.toISOString().slice(0, 10) })
       .eq("id", rule.id);
 
@@ -77,26 +86,48 @@ export default function Recurring() {
   return (
     <RequireAuth>
       <div className="grid gap-6">
-        <h1 className="text-2xl font-semibold">Recurring Rules</h1>
+        <h1 className="text-2xl font-semibold">Recurring</h1>
 
-        {/* Add Rule form (same as before) */}
-        <form onSubmit={addRule} className="card grid md:grid-cols-3 gap-3 p-4">
-          {/* fields here */}
-          <button className="btn">Save</button>
-        </form>
-
-        {/* Rules list */}
-        <div className="card p-4">
-          <h3 className="font-semibold mb-2">Rules</h3>
-          {rules.map((r) => (
-            <div key={r.id} className="flex items-center justify-between border-b border-white/10 py-2">
-              <div>
-                <div>{r.kind} • {r.currency} {r.amount} • next {r.next_run}</div>
-                <div className="text-sm text-white/60">{r.interval} interval</div>
-              </div>
-              <button className="btn" onClick={() => applyRule(r)}>Apply</button>
+        <div className="card">
+          <h3 className="font-semibold mb-2">Add Rule</h3>
+          <form onSubmit={addRule} className="grid md:grid-cols-3 gap-3">
+            <select name="account_id" className="input">
+              <option value="">(No account)</option>
+              {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+            </select>
+            <select name="category_id" className="input">
+              <option value="">Uncategorized</option>
+              {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select name="kind" className="input"><option>income</option><option>expense</option></select>
+              <select name="interval" className="input">
+                <option>weekly</option><option>monthly</option><option>quarterly</option><option>yearly</option>
+              </select>
             </div>
-          ))}
+            <div className="grid grid-cols-2 gap-2">
+              <input name="amount" type="number" step="0.01" placeholder="Amount" className="input" />
+              <select name="currency" className="input"><option>SSP</option><option>USD</option><option>KES</option></select>
+            </div>
+            <input name="next_run" type="date" className="input" />
+            <input name="note" className="input" placeholder="Note (optional)" />
+            <div><button className="btn">Save</button></div>
+          </form>
+        </div>
+
+        <div className="card">
+          <h3 className="font-semibold mb-2">Rules</h3>
+          <div className="space-y-2">
+            {rules.map((r) => (
+              <div key={r.id} className="flex items-center justify-between border-b border-white/10 pb-2">
+                <div className="text-sm">
+                  <div className="font-medium">{r.kind} • {r.currency} {Number(r.amount).toFixed(2)} • next {r.next_run}</div>
+                  <div className="text-white/60">interval: {r.interval}</div>
+                </div>
+                <button className="btn" onClick={() => applyRule(r)}>Apply now</button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

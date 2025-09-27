@@ -7,6 +7,14 @@ import Toast from "@/components/Toast";
 
 type Category = { id: string; name: string; kind: "income" | "expense" };
 type Budget = { id: string; category_id: string; month: string; limit_amount: number; currency: string };
+type Tx = { category_id: string | null; amount: number; kind: string; tx_date: string; currency: string };
+
+const color = (id: string) => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const colors = ["#22d3ee","#a78bfa","#fb7185","#34d399","#f59e0b","#f472b6","#84cc16","#e879f9","#f97316"];
+  return colors[h % colors.length];
+};
 
 export default function BudgetsPage() {
   const [cats, setCats] = useState<Category[]>([]);
@@ -16,41 +24,43 @@ export default function BudgetsPage() {
   const [toast, setToast] = useState<{ message: string; type?: "success" | "error" | "warning" } | null>(null);
 
   const fetchAll = async () => {
-    const c = await supabase.from("categories").select("*").eq("kind", "expense");
-    const b = await supabase.from("budgets").select("*").gte("month", month + "-01").lte("month", month + "-31");
+    const { data: cData } = await supabase.from("categories").select("*").eq("kind", "expense");
+    const { data: bData } = await supabase
+      .from("budgets")
+      .select("*")
+      .gte("month", month + "-01")
+      .lte("month", month + "-31");
 
-    if (!c.error) setCats(c.data || []);
-    if (!b.error) setBudgets(b.data || []);
+    setCats(cData || []);
+    setBudgets(bData || []);
 
-    // Fetch expenses for this month
+    // month expense aggregation
     const start = month + "-01";
     const end = new Date(new Date(start).getFullYear(), new Date(start).getMonth() + 1, 0)
       .toISOString()
       .slice(0, 10);
-    const t = await supabase
+    const { data: tData } = await supabase
       .from("transactions")
       .select("category_id,amount,kind,tx_date,currency")
       .gte("tx_date", start)
       .lte("tx_date", end);
 
-    if (!t.error) {
-      const m: Record<string, number> = {};
-      (t.data || []).forEach((x: any) => {
-        if (x.kind === "expense" && x.category_id) {
-          m[x.category_id] = (m[x.category_id] || 0) + Number(x.amount);
-        }
-      });
-      setProgress(m);
+    const m: Record<string, number> = {};
+    (tData || []).forEach((x: Tx) => {
+      if (x.kind === "expense" && x.category_id) {
+        m[x.category_id] = (m[x.category_id] || 0) + Number(x.amount);
+      }
+    });
+    setProgress(m);
 
-      // 🔔 Budget exceeded check
-      (b.data || []).forEach((budget) => {
-        const spent = m[budget.category_id] || 0;
-        if (spent > Number(budget.limit_amount)) {
-          const catName = c.data?.find((cat) => cat.id === budget.category_id)?.name ?? "Unknown";
-          setToast({ message: `⚠️ You’ve exceeded your budget for ${catName}`, type: "warning" });
-        }
-      });
-    }
+    // Over-limit toasts (warning)
+    (bData || []).forEach((b) => {
+      const spent = m[b.category_id] || 0;
+      if (spent > Number(b.limit_amount)) {
+        const catName = (cData || []).find((c) => c.id === b.category_id)?.name ?? "Unknown";
+        setToast({ message: `⚠️ You’ve exceeded your budget for ${catName}`, type: "warning" });
+      }
+    });
   };
 
   useEffect(() => { fetchAll(); }, [month]);
@@ -62,7 +72,6 @@ export default function BudgetsPage() {
       currency: String(form.get("currency")),
       month: month + "-01",
     });
-
     if (error) {
       if (error.message.includes("duplicate key value")) {
         setToast({ message: "⚠️ A budget for this category and month already exists.", type: "warning" });
@@ -78,7 +87,51 @@ export default function BudgetsPage() {
   return (
     <RequireAuth>
       <div className="grid gap-6">
-        {/* ... existing budgets UI ... */}
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-semibold">Budgets</h1>
+          <input className="input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </div>
+
+        <div className="card">
+          <h2 className="font-semibold mb-2">Add Budget</h2>
+          <form action={addBudget} className="grid md:grid-cols-4 gap-2">
+            <select name="category_id" className="input">
+              {cats.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+            </select>
+            <input name="limit_amount" className="input" type="number" step="0.01" placeholder="Limit amount" required />
+            <select name="currency" className="input">
+              <option>SSP</option><option>USD</option><option>KES</option>
+            </select>
+            <button className="btn">Save</button>
+          </form>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-3">
+          {budgets.map((b) => {
+            const spent = progress[b.category_id] || 0;
+            const pct = b.limit_amount ? Math.min(100, Math.round((100 * spent) / Number(b.limit_amount))) : 0;
+            const col = color(b.category_id);
+            const catName = cats.find((c) => c.id === b.category_id)?.name ?? "—";
+            return (
+              <div key={b.id} className="card">
+                <div className="flex justify-between">
+                  <div className="font-semibold">
+                    <span className="legend-dot" style={{ backgroundColor: col }}></span>
+                    {catName}
+                  </div>
+                  <div className="text-white/70">
+                    {fmt(Number(b.limit_amount || 0), b.currency)}
+                  </div>
+                </div>
+                <div className="mt-2 w-full bg-white/10 rounded-full h-2">
+                  <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: col }}></div>
+                </div>
+                <div className="text-sm text-white/70 mt-1">{pct}% used • Spent {fmt(spent, b.currency)}</div>
+              </div>
+            );
+          })}
+        </div>
+
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </RequireAuth>
