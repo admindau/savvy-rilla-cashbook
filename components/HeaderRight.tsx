@@ -26,11 +26,11 @@ export default function HeaderRight({ user }: { user: any }) {
         <div className="absolute right-0 mt-2 w-48 bg-black border border-white/10 rounded shadow-lg">
           <div className="px-3 py-2 text-white/70 text-xs">Profile</div>
           <Link
-            href="/app/profile/currency-rates"
+            href="/app/profile/fx"
             className="block px-3 py-2 hover:bg-white/10"
             onClick={() => setOpen(false)}
           >
-            Currency Rates
+            FX
           </Link>
           <button
             onClick={signOut}
