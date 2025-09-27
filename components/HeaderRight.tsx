@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Toast from "@/components/Toast";
 
 export default function HeaderRight() {
   const [email, setEmail] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -13,8 +15,15 @@ export default function HeaderRight() {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/auth";
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setToast({ message: error.message, type: "error" });
+    } else {
+      setToast({ message: "👋 Logged out" });
+      setTimeout(() => {
+        window.location.href = "/auth";
+      }, 1200);
+    }
   };
 
   return (
@@ -46,6 +55,8 @@ export default function HeaderRight() {
           </button>
         </div>
       )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
