@@ -8,12 +8,7 @@ import { fmt } from "@/lib/format";
 import { useEffect, useState, FormEvent } from "react";
 
 import { Doughnut } from "react-chartjs-2";
-import {
-  Chart,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
+import { Chart, ArcElement, Tooltip, Legend } from "chart.js";
 Chart.register(ArcElement, Tooltip, Legend);
 
 type Category = { id: string; name: string; kind: "income" | "expense" };
@@ -29,7 +24,8 @@ type Recurring = {
 };
 
 const convert = (amount: number, from: string, to: "USD" | "SSP" | "KES") => {
-  const ssp = from === "USD" ? amount * 6000 : from === "KES" ? amount * 46.5 : amount;
+  const ssp =
+    from === "USD" ? amount * 6000 : from === "KES" ? amount * 46.5 : amount;
   if (to === "SSP") return ssp;
   if (to === "USD") return ssp / 6000;
   if (to === "KES") return ssp / 46.5;
@@ -41,13 +37,18 @@ export default function RecurringPage() {
   const [rules, setRules] = useState<Recurring[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Recurring>>({});
-  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type?: "success" | "error";
+  } | null>(null);
 
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
-  const [chartCurrency, setChartCurrency] = useState<"USD" | "SSP" | "KES">("SSP");
+  const [chartCurrency, setChartCurrency] = useState<"USD" | "SSP" | "KES">(
+    "SSP"
+  );
 
   const fetchAll = async () => {
     const { data: userData } = await supabase.auth.getUser();
@@ -122,7 +123,7 @@ export default function RecurringPage() {
         category_id: String(editDraft.category_id),
         amount: Number(editDraft.amount),
         currency: String(editDraft.currency),
-        frequency: String(editDraft.frequency) as "daily" | "weekly" | "monthly",
+        frequency: editDraft.frequency as "daily" | "weekly" | "monthly",
         start_date: String(editDraft.start_date),
       })
       .eq("id", editingId)
@@ -142,7 +143,11 @@ export default function RecurringPage() {
     if (!user_id) return;
 
     if (!confirm("Delete this recurring rule?")) return;
-    const { error } = await supabase.from("recurring").delete().eq("id", id).eq("user_id", user_id);
+    const { error } = await supabase
+      .from("recurring")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user_id);
     if (error) setToast({ message: error.message, type: "error" });
     else setToast({ message: "🗑️ Recurring rule deleted" });
     fetchAll();
@@ -154,11 +159,28 @@ export default function RecurringPage() {
 
   // Chart data (converted to selected chartCurrency ONLY)
   const donut = {
-    labels: rules.map((r) => cats.find((c) => c.id === r.category_id)?.name ?? "—"),
+    labels: rules.map(
+      (r) => cats.find((c) => c.id === r.category_id)?.name ?? "—"
+    ),
     datasets: [
       {
-        data: rules.map((r) => convert(Number(r.amount), r.currency, chartCurrency)),
-        backgroundColor: rules.map((_, i) => ["#22d3ee","#a78bfa","#fb7185","#34d399","#f59e0b","#f472b6","#84cc16","#e879f9","#f97316"][i % 9]),
+        data: rules.map((r) =>
+          convert(Number(r.amount), r.currency, chartCurrency)
+        ),
+        backgroundColor: rules.map(
+          (_, i) =>
+            [
+              "#22d3ee",
+              "#a78bfa",
+              "#fb7185",
+              "#34d399",
+              "#f59e0b",
+              "#f472b6",
+              "#84cc16",
+              "#e879f9",
+              "#f97316",
+            ][i % 9]
+        ),
       },
     ],
   };
@@ -200,9 +222,9 @@ export default function RecurringPage() {
               <option>KES</option>
             </select>
             <select name="frequency" className="input">
-              <option>daily</option>
-              <option>weekly</option>
-              <option>monthly</option>
+              <option value="daily">daily</option>
+              <option value="weekly">weekly</option>
+              <option value="monthly">monthly</option>
             </select>
             <input name="start_date" type="date" className="input" required />
             <button className="btn">Save</button>
@@ -240,7 +262,8 @@ export default function RecurringPage() {
             </thead>
             <tbody>
               {rules.map((r) => {
-                const catName = cats.find((c) => c.id === r.category_id)?.name ?? "—";
+                const catName =
+                  cats.find((c) => c.id === r.category_id)?.name ?? "—";
                 const isEditing = editingId === r.id;
                 return (
                   <tr key={r.id} className="border-t border-white/10">
@@ -282,7 +305,10 @@ export default function RecurringPage() {
                           <select
                             value={String(editDraft.category_id)}
                             onChange={(e) =>
-                              setEditDraft((d) => ({ ...d, category_id: e.target.value }))
+                              setEditDraft((d) => ({
+                                ...d,
+                                category_id: e.target.value,
+                              }))
                             }
                             className="input"
                           >
@@ -299,7 +325,10 @@ export default function RecurringPage() {
                             className="input"
                             value={Number(editDraft.amount)}
                             onChange={(e) =>
-                              setEditDraft((d) => ({ ...d, amount: Number(e.target.value) }))
+                              setEditDraft((d) => ({
+                                ...d,
+                                amount: Number(e.target.value),
+                              }))
                             }
                           />
                         </td>
@@ -307,7 +336,10 @@ export default function RecurringPage() {
                           <select
                             value={String(editDraft.currency)}
                             onChange={(e) =>
-                              setEditDraft((d) => ({ ...d, currency: e.target.value }))
+                              setEditDraft((d) => ({
+                                ...d,
+                                currency: e.target.value,
+                              }))
                             }
                             className="input"
                           >
@@ -320,13 +352,17 @@ export default function RecurringPage() {
                           <select
                             value={String(editDraft.frequency)}
                             onChange={(e) =>
-                              setEditDraft((d) => ({ ...d, frequency: e.target.value }))
+                              setEditDraft((d) => ({
+                                ...d,
+                                frequency: e.target
+                                  .value as "daily" | "weekly" | "monthly",
+                              }))
                             }
                             className="input"
                           >
-                            <option>daily</option>
-                            <option>weekly</option>
-                            <option>monthly</option>
+                            <option value="daily">daily</option>
+                            <option value="weekly">weekly</option>
+                            <option value="monthly">monthly</option>
                           </select>
                         </td>
                         <td>
@@ -335,7 +371,10 @@ export default function RecurringPage() {
                             className="input"
                             value={String(editDraft.start_date)}
                             onChange={(e) =>
-                              setEditDraft((d) => ({ ...d, start_date: e.target.value }))
+                              setEditDraft((d) => ({
+                                ...d,
+                                start_date: e.target.value,
+                              }))
                             }
                           />
                         </td>
@@ -395,7 +434,9 @@ export default function RecurringPage() {
           ))}
         </div>
         <div className="card">
-          <h3 className="font-semibold mb-3">Recurring Totals ({chartCurrency})</h3>
+          <h3 className="font-semibold mb-3">
+            Recurring Totals ({chartCurrency})
+          </h3>
           <Doughnut data={donut} />
         </div>
 
