@@ -22,9 +22,7 @@ export default function FxPage() {
     }
   };
 
-  useEffect(() => {
-    loadRates();
-  }, []);
+  useEffect(() => { loadRates(); }, []);
 
   const onSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,28 +47,16 @@ export default function FxPage() {
           <form onSubmit={onSave} className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-white/70">1 USD in SSP</label>
-              <input
-                type="number"
-                step="0.01"
-                className="input"
-                value={usdToSsp}
-                onChange={(e) => setUsdToSsp(Number(e.target.value))}
-              />
+              <input type="number" step="0.01" className="input" value={usdToSsp}
+                     onChange={(e) => setUsdToSsp(Number(e.target.value))} />
             </div>
             <div>
               <label className="text-sm text-white/70">1 KES in SSP</label>
-              <input
-                type="number"
-                step="0.01"
-                className="input"
-                value={kesToSsp}
-                onChange={(e) => setKesToSsp(Number(e.target.value))}
-              />
+              <input type="number" step="0.01" className="input" value={kesToSsp}
+                     onChange={(e) => setKesToSsp(Number(e.target.value))} />
             </div>
             <div className="md:col-span-2">
-              <button type="submit" className="btn w-full">
-                Save Rates
-              </button>
+              <button type="submit" className="btn w-full">Save Rates</button>
             </div>
           </form>
         </div>
