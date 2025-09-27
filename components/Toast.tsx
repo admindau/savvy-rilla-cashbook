@@ -7,7 +7,7 @@ export default function Toast({
   onClose,
 }: {
   message: string;
-  type?: "success" | "error";
+  type?: "success" | "error" | "warning";
   onClose: () => void;
 }) {
   const [visible, setVisible] = useState(true);
@@ -22,7 +22,12 @@ export default function Toast({
 
   if (!visible) return null;
 
-  const bg = type === "success" ? "bg-emerald-600" : "bg-red-600";
+  const bg =
+    type === "success"
+      ? "bg-emerald-600"
+      : type === "error"
+      ? "bg-red-600"
+      : "bg-amber-500"; // warning
 
   return (
     <div
