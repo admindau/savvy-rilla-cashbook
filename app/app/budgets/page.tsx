@@ -1,7 +1,7 @@
 "use client";
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { fmt } from "@/lib/format";
 import Toast from "@/components/Toast";
 import { Doughnut, Bar } from "react-chartjs-2";
@@ -34,6 +34,7 @@ export default function BudgetsPage() {
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Budget>>({});
+  const [query, setQuery] = useState("");
   const [toast, setToast] = useState<{ message: string; type?: "success" | "error" | "warning" } | null>(null);
 
   const fetchAll = async () => {
@@ -78,11 +79,11 @@ export default function BudgetsPage() {
 
   useEffect(() => { fetchAll(); }, [month]);
 
-  const addBudget = async (form: FormData) => {
+  const addBudget = async (fd: FormData) => {
     const { error } = await supabase.from("budgets").insert({
-      category_id: String(form.get("category_id")),
-      limit_amount: Number(form.get("limit_amount")),
-      currency: String(form.get("currency")),
+      category_id: String(fd.get("category_id")),
+      limit_amount: Number(fd.get("limit_amount")),
+      currency: String(fd.get("currency")),
       month: month + "-01",
     });
     if (error) {
@@ -120,27 +121,32 @@ export default function BudgetsPage() {
   };
 
   // Charts
+  const filtered = budgets.filter((b) => {
+    const catName = cats.find((c) => c.id === b.category_id)?.name ?? "";
+    return catName.toLowerCase().includes(query.toLowerCase());
+  });
+
   const donut = {
-    labels: budgets.map((b) => cats.find((c) => c.id === b.category_id)?.name ?? "—"),
+    labels: filtered.map((b) => cats.find((c) => c.id === b.category_id)?.name ?? "—"),
     datasets: [
       {
-        data: budgets.map((b) => Number(b.limit_amount)),
-        backgroundColor: budgets.map((b) => color(b.category_id)),
+        data: filtered.map((b) => Number(b.limit_amount)),
+        backgroundColor: filtered.map((b) => color(b.category_id)),
       },
     ],
   };
 
   const bar = {
-    labels: budgets.map((b) => cats.find((c) => c.id === b.category_id)?.name ?? "—"),
+    labels: filtered.map((b) => cats.find((c) => c.id === b.category_id)?.name ?? "—"),
     datasets: [
       {
         label: "Spent",
-        data: budgets.map((b) => progress[b.category_id] || 0),
+        data: filtered.map((b) => progress[b.category_id] || 0),
         backgroundColor: "#ef4444",
       },
       {
         label: "Budget",
-        data: budgets.map((b) => Number(b.limit_amount)),
+        data: filtered.map((b) => Number(b.limit_amount)),
         backgroundColor: "#22c55e",
       },
     ],
@@ -157,7 +163,14 @@ export default function BudgetsPage() {
         {/* Add Budget */}
         <div className="card">
           <h2 className="font-semibold mb-2">Add Budget</h2>
-          <form action={addBudget} className="grid md:grid-cols-4 gap-2">
+          <form
+            onSubmit={(e: FormEvent<HTMLFormElement>) => {
+              e.preventDefault();
+              addBudget(new FormData(e.currentTarget));
+              e.currentTarget.reset();
+            }}
+            className="grid md:grid-cols-4 gap-2"
+          >
             <select name="category_id" className="input">
               {cats.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
@@ -165,6 +178,17 @@ export default function BudgetsPage() {
             <select name="currency" className="input"><option>SSP</option><option>USD</option><option>KES</option></select>
             <button className="btn">Save</button>
           </form>
+        </div>
+
+        {/* Search */}
+        <div className="card flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Search Budgets</h3>
+          <input
+            className="input max-w-md"
+            placeholder="🔍 Search by category..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
 
         {/* Budgets list */}
@@ -177,7 +201,7 @@ export default function BudgetsPage() {
               </tr>
             </thead>
             <tbody>
-              {budgets.map((b) => {
+              {filtered.map((b) => {
                 const spent = progress[b.category_id] || 0;
                 const pct = b.limit_amount ? Math.round((100 * spent) / Number(b.limit_amount)) : 0;
                 const catName = cats.find((c) => c.id === b.category_id)?.name ?? "—";
@@ -228,7 +252,7 @@ export default function BudgetsPage() {
 
         {/* Progress bars */}
         <div className="grid md:grid-cols-2 gap-3">
-          {budgets.map((b) => {
+          {filtered.map((b) => {
             const spent = progress[b.category_id] || 0;
             const pct = b.limit_amount ? Math.min(100, Math.round((100 * spent) / Number(b.limit_amount))) : 0;
             const col = color(b.category_id);
