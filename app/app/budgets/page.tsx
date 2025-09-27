@@ -4,6 +4,17 @@ import { supabase } from "@/lib/supabaseClient";
 import { useEffect, useState } from "react";
 import { fmt } from "@/lib/format";
 import Toast from "@/components/Toast";
+import { Doughnut, Bar } from "react-chartjs-2";
+import {
+  Chart,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+} from "chart.js";
+Chart.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 type Category = { id: string; name: string; kind: "income" | "expense" };
 type Budget = { id: string; category_id: string; month: string; limit_amount: number; currency: string };
@@ -21,6 +32,8 @@ export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Budget>>({});
   const [toast, setToast] = useState<{ message: string; type?: "success" | "error" | "warning" } | null>(null);
 
   const fetchAll = async () => {
@@ -53,7 +66,7 @@ export default function BudgetsPage() {
     });
     setProgress(m);
 
-    // Over-limit toasts (warning)
+    // Over-limit toasts
     (bData || []).forEach((b) => {
       const spent = m[b.category_id] || 0;
       if (spent > Number(b.limit_amount)) {
@@ -84,6 +97,55 @@ export default function BudgetsPage() {
     }
   };
 
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const { error } = await supabase.from("budgets").update({
+      category_id: String(editDraft.category_id),
+      limit_amount: Number(editDraft.limit_amount),
+      currency: String(editDraft.currency),
+    }).eq("id", editingId);
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "✏️ Budget updated" });
+    setEditingId(null);
+    setEditDraft({});
+    fetchAll();
+  };
+
+  const delBudget = async (id: string) => {
+    if (!confirm("Delete this budget?")) return;
+    const { error } = await supabase.from("budgets").delete().eq("id", id);
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "🗑️ Budget deleted" });
+    fetchAll();
+  };
+
+  // Charts
+  const donut = {
+    labels: budgets.map((b) => cats.find((c) => c.id === b.category_id)?.name ?? "—"),
+    datasets: [
+      {
+        data: budgets.map((b) => Number(b.limit_amount)),
+        backgroundColor: budgets.map((b) => color(b.category_id)),
+      },
+    ],
+  };
+
+  const bar = {
+    labels: budgets.map((b) => cats.find((c) => c.id === b.category_id)?.name ?? "—"),
+    datasets: [
+      {
+        label: "Spent",
+        data: budgets.map((b) => progress[b.category_id] || 0),
+        backgroundColor: "#ef4444",
+      },
+      {
+        label: "Budget",
+        data: budgets.map((b) => Number(b.limit_amount)),
+        backgroundColor: "#22c55e",
+      },
+    ],
+  };
+
   return (
     <RequireAuth>
       <div className="grid gap-6">
@@ -92,6 +154,7 @@ export default function BudgetsPage() {
           <input className="input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </div>
 
+        {/* Add Budget */}
         <div className="card">
           <h2 className="font-semibold mb-2">Add Budget</h2>
           <form action={addBudget} className="grid md:grid-cols-4 gap-2">
@@ -99,13 +162,71 @@ export default function BudgetsPage() {
               {cats.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
             <input name="limit_amount" className="input" type="number" step="0.01" placeholder="Limit amount" required />
-            <select name="currency" className="input">
-              <option>SSP</option><option>USD</option><option>KES</option>
-            </select>
+            <select name="currency" className="input"><option>SSP</option><option>USD</option><option>KES</option></select>
             <button className="btn">Save</button>
           </form>
         </div>
 
+        {/* Budgets list */}
+        <div className="card overflow-x-auto">
+          <h3 className="font-semibold mb-2">All Budgets</h3>
+          <table className="w-full text-sm">
+            <thead className="text-white/70">
+              <tr>
+                <th>Category</th><th>Limit</th><th>Currency</th><th>Month</th><th>Spent</th><th>% Used</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {budgets.map((b) => {
+                const spent = progress[b.category_id] || 0;
+                const pct = b.limit_amount ? Math.round((100 * spent) / Number(b.limit_amount)) : 0;
+                const catName = cats.find((c) => c.id === b.category_id)?.name ?? "—";
+                const isEditing = editingId === b.id;
+                return (
+                  <tr key={b.id} className="border-t border-white/10">
+                    {!isEditing ? (
+                      <>
+                        <td>{catName}</td>
+                        <td>{fmt(Number(b.limit_amount), b.currency)}</td>
+                        <td>{b.currency}</td>
+                        <td>{b.month}</td>
+                        <td>{fmt(spent, b.currency)}</td>
+                        <td>{pct}%</td>
+                        <td>
+                          <button className="underline mr-2" onClick={() => { setEditingId(b.id); setEditDraft(b); }}>Edit</button>
+                          <button className="underline text-red-400" onClick={() => delBudget(b.id)}>Delete</button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>
+                          <select value={String(editDraft.category_id)} onChange={(e) => setEditDraft((d) => ({ ...d, category_id: e.target.value }))} className="input">
+                            {cats.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                          </select>
+                        </td>
+                        <td><input type="number" className="input" value={Number(editDraft.limit_amount)} onChange={(e) => setEditDraft((d) => ({ ...d, limit_amount: Number(e.target.value) }))} /></td>
+                        <td>
+                          <select value={String(editDraft.currency)} onChange={(e) => setEditDraft((d) => ({ ...d, currency: e.target.value }))} className="input">
+                            <option>SSP</option><option>USD</option><option>KES</option>
+                          </select>
+                        </td>
+                        <td>{b.month}</td>
+                        <td>{fmt(progress[b.category_id] || 0, b.currency)}</td>
+                        <td>-</td>
+                        <td>
+                          <button className="underline mr-2" onClick={saveEdit}>Save</button>
+                          <button className="underline" onClick={() => { setEditingId(null); setEditDraft({}); }}>Cancel</button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Progress bars */}
         <div className="grid md:grid-cols-2 gap-3">
           {budgets.map((b) => {
             const spent = progress[b.category_id] || 0;
@@ -116,12 +237,9 @@ export default function BudgetsPage() {
               <div key={b.id} className="card">
                 <div className="flex justify-between">
                   <div className="font-semibold">
-                    <span className="legend-dot" style={{ backgroundColor: col }}></span>
-                    {catName}
+                    <span className="legend-dot" style={{ backgroundColor: col }}></span>{catName}
                   </div>
-                  <div className="text-white/70">
-                    {fmt(Number(b.limit_amount || 0), b.currency)}
-                  </div>
+                  <div className="text-white/70">{fmt(Number(b.limit_amount), b.currency)}</div>
                 </div>
                 <div className="mt-2 w-full bg-white/10 rounded-full h-2">
                   <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: col }}></div>
@@ -130,6 +248,18 @@ export default function BudgetsPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Charts */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="card">
+            <h3 className="font-semibold mb-3">Budget Breakdown (Donut)</h3>
+            <Doughnut data={donut} />
+          </div>
+          <div className="card">
+            <h3 className="font-semibold mb-3">Spent vs Budget (Bar)</h3>
+            <Bar data={bar} />
+          </div>
         </div>
 
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
