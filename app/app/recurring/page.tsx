@@ -24,6 +24,10 @@ export default function RecurringPage() {
   const [editDraft, setEditDraft] = useState<Partial<Recurring>>({});
   const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
 
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+
   const fetchAll = async () => {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
@@ -32,14 +36,31 @@ export default function RecurringPage() {
     const { data: cData } = await supabase.from("categories").select("*");
     setCats(cData || []);
 
-    const { data: rData } = await supabase
+    let q = supabase
       .from("recurring")
       .select("*")
-      .eq("user_id", user_id);
+      .eq("user_id", user_id)
+      .order("start_date", { ascending: true })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+
+    if (query) {
+      const matchCats = (cData || []).filter((c) =>
+        c.name.toLowerCase().includes(query.toLowerCase())
+      );
+      const catIds = matchCats.map((c) => c.id);
+      if (catIds.length > 0) {
+        q = q.in("category_id", catIds);
+      } else {
+        setRules([]);
+        return;
+      }
+    }
+
+    const { data: rData } = await q;
     setRules(rData || []);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [page, query]);
 
   const addRule = async (fd: FormData) => {
     const { data: userData } = await supabase.auth.getUser();
@@ -99,8 +120,7 @@ export default function RecurringPage() {
   };
 
   const applyRule = async (id: string) => {
-    // Simplified: just show toast
-    setToast({ message: "✅ Rule applied (implement TX creation logic later)" });
+    setToast({ message: "✅ Rule applied (implement TX creation later)" });
   };
 
   return (
@@ -132,6 +152,17 @@ export default function RecurringPage() {
             <input name="start_date" type="date" className="input" required />
             <button className="btn">Save</button>
           </form>
+        </div>
+
+        {/* Search */}
+        <div className="card flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Search Recurring Rules</h3>
+          <input
+            className="input max-w-md"
+            placeholder="🔍 Search by category..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
 
         {/* Rules List */}
@@ -198,6 +229,17 @@ export default function RecurringPage() {
               })}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          <div className="flex justify-between items-center mt-3">
+            <button disabled={page === 0} className="btn" onClick={() => setPage((p) => Math.max(0, p - 1))}>
+              Previous
+            </button>
+            <span className="text-white/70">Page {page + 1}</span>
+            <button disabled={rules.length < pageSize} className="btn" onClick={() => setPage((p) => p + 1)}>
+              Next
+            </button>
+          </div>
         </div>
 
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
