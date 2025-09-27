@@ -1,23 +1,26 @@
 "use client";
 import { FormEvent, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Toast from "@/components/Toast";
 
 export default function Auth() {
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
 
   const onLogin = async (e: FormEvent) => {
     e.preventDefault();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setMsg(error ? error.message : "Logged in!");
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "✅ Welcome back!" });
   };
 
   const onSignup = async (e: FormEvent) => {
     e.preventDefault();
     const { error } = await supabase.auth.signUp({ email, password });
-    setMsg(error ? error.message : "Check your email to confirm.");
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "✅ Account created, check your email to confirm" });
   };
 
   const onForgot = async (e: FormEvent) => {
@@ -25,7 +28,8 @@ export default function Auth() {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin + "/auth/reset",
     });
-    setMsg(error ? error.message : "Password reset email sent.");
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "✅ Password reset email sent" });
   };
 
   return (
@@ -37,6 +41,7 @@ export default function Auth() {
         <h2 className="text-xl font-semibold mb-4">
           {mode === "login" ? "Sign In" : mode === "signup" ? "Sign Up" : "Forgot Password"}
         </h2>
+
         <form
           onSubmit={mode === "login" ? onLogin : mode === "signup" ? onSignup : onForgot}
           className="grid gap-3"
@@ -63,7 +68,7 @@ export default function Auth() {
             {mode === "login" ? "Login" : mode === "signup" ? "Register" : "Send Reset Link"}
           </button>
         </form>
-        {msg && <div className="text-red-400 mt-2">{msg}</div>}
+
         <div className="mt-3 text-sm text-white/70">
           {mode === "login" ? "No account?" : "Already have an account?"}{" "}
           <button
@@ -79,6 +84,10 @@ export default function Auth() {
           </button>
         </div>
       </div>
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }
