@@ -1,62 +1,45 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import Toast from "@/components/Toast";
 
-export default function HeaderRight() {
-  const [email, setEmail] = useState<string | null>(null);
+export default function HeaderRight({ user }: { user: any }) {
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
-    });
-  }, []);
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      setToast({ message: error.message, type: "error" });
-    } else {
-      setToast({ message: "👋 Logged out" });
-      setTimeout(() => {
-        window.location.href = "/auth";
-      }, 1200);
-    }
+    await supabase.auth.signOut();
+    window.location.href = "/";
   };
 
   return (
     <div className="relative">
       <button
-        className="card px-3 py-1 flex items-center gap-2 hover:bg-white/10"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-3 py-1 rounded hover:bg-white/10"
       >
-        <div className="w-6 h-6 rounded-full bg-white/20 grid place-items-center">👤</div>
-        <span className="text-sm">{email ?? "Profile"}</span>
+        <span className="text-sm">{user?.email}</span>
+        <span className="material-icons">account_circle</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-56 card p-2 z-20">
-          <div className="px-2 py-1 text-xs text-white/60 border-b border-white/10 mb-2">
-            {email ?? "Not signed in"}
-          </div>
-          <button
-            onClick={() => (window.location.href = "/app/dashboard")}
-            className="w-full text-left px-2 py-2 hover:bg-white/10 rounded"
+        <div className="absolute right-0 mt-2 w-48 bg-black border border-white/10 rounded shadow-lg">
+          <div className="px-3 py-2 text-white/70 text-xs">Profile</div>
+          <Link
+            href="/app/profile/currency-rates"
+            className="block px-3 py-2 hover:bg-white/10"
+            onClick={() => setOpen(false)}
           >
-            Profile (coming soon)
-          </button>
+            Currency Rates
+          </Link>
           <button
             onClick={signOut}
-            className="w-full text-left px-2 py-2 hover:bg-white/10 rounded"
+            className="w-full text-left px-3 py-2 hover:bg-white/10"
           >
-            Logout
+            Sign out
           </button>
         </div>
       )}
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
