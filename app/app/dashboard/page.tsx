@@ -4,7 +4,7 @@ import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt } from "@/lib/format";
 import Toast from "@/components/Toast";
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
 import { useFxRates } from "@/lib/useFxRates";
 
 import { Doughnut, Bar } from "react-chartjs-2";
@@ -23,17 +23,17 @@ type Tx = {
   id: string;
   amount: number;
   kind: "income" | "expense";
-  currency: string;
+  currency: "SSP" | "USD" | "KES" | string;
   category_id: string | null;
   account_id: string | null;
   tx_date: string;
   note: string | null;
   user_id?: string;
 };
-type Category = { id: string; name: string };
-type Account = { id: string; name: string; currency: string };
+type Category = { id: string; name: string; kind?: "income" | "expense" };
+type Account = { id: string; name: string; currency: "SSP" | "USD" | "KES" | string };
 
-const colors = [
+const palette = [
   "#22d3ee",
   "#a78bfa",
   "#fb7185",
@@ -43,6 +43,9 @@ const colors = [
   "#84cc16",
   "#e879f9",
   "#f97316",
+  "#60a5fa",
+  "#10b981",
+  "#f43f5e",
 ];
 
 export default function DashboardPage() {
@@ -51,17 +54,17 @@ export default function DashboardPage() {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [accts, setAccts] = useState<Account[]>([]);
+
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState("");
   const pageSize = 50;
 
   const [lifetime, setLifetime] = useState<Record<string, number>>({});
   const [monthly, setMonthly] = useState<Record<string, number>>({});
+  const [showBreakdown, setShowBreakdown] = useState<Record<string, boolean>>({});
 
   const [chartCurrency, setChartCurrency] = useState<"USD" | "SSP" | "KES">("SSP");
-  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(
-    null
-  );
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Tx>>({});
@@ -90,30 +93,30 @@ export default function DashboardPage() {
         c.name.toLowerCase().includes(queryArg.toLowerCase())
       );
       const catIds = matchCats.map((c) => c.id);
-      if (catIds.length > 0) q = q.in("category_id", catIds);
-      else q = q.ilike("note", `%${queryArg}%`);
+      if (catIds.length > 0) {
+        q = q.in("category_id", catIds);
+      } else {
+        q = q.or(
+          `note.ilike.%${queryArg}%,currency.ilike.%${queryArg}%`
+        );
+      }
     }
 
     const { data: tData } = await q;
     setTxs(tData || []);
 
     const cur = new Date();
-    const start = new Date(cur.getFullYear(), cur.getMonth(), 1)
-      .toISOString()
-      .slice(0, 10);
-    const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0)
-      .toISOString()
-      .slice(0, 10);
+    const start = new Date(cur.getFullYear(), cur.getMonth(), 1).toISOString().slice(0, 10);
+    const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).toISOString().slice(0, 10);
 
     const { data: allTx } = await supabase
       .from("transactions")
-      .select("amount,currency,kind,tx_date")
+      .select("amount,currency,kind")
       .eq("user_id", user_id);
     const life: Record<string, number> = {};
     (allTx || []).forEach((t) => {
       life[t.currency] = life[t.currency] || 0;
-      life[t.currency] +=
-        t.kind === "income" ? Number(t.amount) : -Number(t.amount);
+      life[t.currency] += t.kind === "income" ? Number(t.amount) : -Number(t.amount);
     });
     setLifetime(life);
 
@@ -126,8 +129,7 @@ export default function DashboardPage() {
     const mon: Record<string, number> = {};
     (monthTx || []).forEach((t) => {
       mon[t.currency] = mon[t.currency] || 0;
-      mon[t.currency] +=
-        t.kind === "income" ? Number(t.amount) : -Number(t.amount);
+      mon[t.currency] += t.kind === "income" ? Number(t.amount) : -Number(t.amount);
     });
     setMonthly(mon);
   };
@@ -137,54 +139,70 @@ export default function DashboardPage() {
   }, []);
   useEffect(() => {
     load(page, query);
-  }, [page, query]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, query]);
 
-  if (loading) return <div className="animate-pulse text-white/60">Loading…</div>;
-
-  const byCategory: Record<string, number> = {};
-  txs.forEach((t) => {
-    if (t.kind === "expense" && t.category_id) {
-      byCategory[t.category_id] =
-        (byCategory[t.category_id] || 0) +
-        convert(Number(t.amount), t.currency, chartCurrency);
-    }
-  });
-  const donut = {
-    labels: Object.keys(byCategory).map(
-      (id) => cats.find((c) => c.id === id)?.name ?? "—"
-    ),
-    datasets: [
-      { data: Object.values(byCategory), backgroundColor: colors },
-    ],
+  const calcBreakdown = (currency: string) => {
+    const income = txs
+      .filter((t) => t.currency === currency && t.kind === "income")
+      .reduce((s, t) => s + Number(t.amount), 0);
+    const expense = txs
+      .filter((t) => t.currency === currency && t.kind === "expense")
+      .reduce((s, t) => s + Number(t.amount), 0);
+    const balance = lifetime[currency] || 0;
+    return { income, expense, balance };
   };
 
-  const byCurrency: Record<string, { income: number; expense: number }> = {};
-  txs.forEach((t) => {
-    if (!byCurrency[t.currency])
-      byCurrency[t.currency] = { income: 0, expense: 0 };
-    byCurrency[t.currency][
-      t.kind === "income" ? "income" : "expense"
-    ] += Number(t.amount);
-  });
-  const bar = {
-    labels: Object.keys(byCurrency),
-    datasets: [
-      {
-        label: "Income",
-        data: Object.entries(byCurrency).map(([cur, v]) =>
-          convert(v.income, cur, chartCurrency)
-        ),
-        backgroundColor: "#22c55e",
-      },
-      {
-        label: "Expense",
-        data: Object.entries(byCurrency).map(([cur, v]) =>
-          convert(v.expense, cur, chartCurrency)
-        ),
-        backgroundColor: "#ef4444",
-      },
-    ],
-  };
+  const byCategory: Record<string, number> = useMemo(() => {
+    const agg: Record<string, number> = {};
+    txs.forEach((t) => {
+      if (t.kind === "expense" && t.category_id) {
+        agg[t.category_id] =
+          (agg[t.category_id] || 0) + convert(Number(t.amount), t.currency, chartCurrency);
+      }
+    });
+    return agg;
+  }, [txs, chartCurrency, convert]);
+
+  const donut = useMemo(
+    () => ({
+      labels: Object.keys(byCategory).map(
+        (id) => cats.find((c) => c.id === id)?.name ?? "—"
+      ),
+      datasets: [{ data: Object.values(byCategory), backgroundColor: palette }],
+    }),
+    [byCategory, cats]
+  );
+
+  const byCurrency: Record<string, { income: number; expense: number }> = useMemo(() => {
+    const agg: Record<string, { income: number; expense: number }> = {};
+    txs.forEach((t) => {
+      if (!agg[t.currency]) agg[t.currency] = { income: 0, expense: 0 };
+      agg[t.currency][t.kind === "income" ? "income" : "expense"] += Number(t.amount);
+    });
+    return agg;
+  }, [txs]);
+
+  const bar = useMemo(
+    () => ({
+      labels: Object.keys(byCurrency),
+      datasets: [
+        {
+          label: "Income",
+          data: Object.entries(byCurrency).map(([cur, v]) => convert(v.income, cur, chartCurrency)),
+          backgroundColor: "#22c55e",
+        },
+        {
+          label: "Expense",
+          data: Object.entries(byCurrency).map(([cur, v]) =>
+            convert(v.expense, cur, chartCurrency)
+          ),
+          backgroundColor: "#ef4444",
+        },
+      ],
+    }),
+    [byCurrency, chartCurrency, convert]
+  );
 
   const addAccount = async (fd: FormData) => {
     const { data: userData } = await supabase.auth.getUser();
@@ -262,25 +280,36 @@ export default function DashboardPage() {
     if (!confirm("Delete this transaction?")) return;
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
-    const { error } = await supabase
-      .from("transactions")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user_id);
+    const { error } = await supabase.from("transactions").delete().eq("id", id).eq("user_id", user_id);
     if (error) setToast({ message: error.message, type: "error" });
     else setToast({ message: "🗑️ Transaction deleted" });
     load(page, query);
   };
 
+  if (loading) {
+    return (
+      <RequireAuth>
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full blur-xl animate-pulse bg-cyan-500/30" />
+            <div className="absolute inset-0 w-20 h-20 rounded-full border border-cyan-400 animate-[pulse_1.8s_ease-in-out_infinite]" />
+          </div>
+          <div className="mt-6 text-cyan-300 tracking-widest">
+            ⚡ Initializing Futuristic Cashbook…
+          </div>
+        </div>
+      </RequireAuth>
+    );
+  }
+
   return (
     <RequireAuth>
       <div className="grid gap-6">
-        {/* Search */}
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <input
             className="input max-w-md"
-            placeholder="🔍 Search by category or note..."
+            placeholder="🔍 Search by category, currency or note..."
             value={query}
             onChange={(e) => {
               setPage(0);
@@ -295,20 +324,52 @@ export default function DashboardPage() {
             <h2 className="font-semibold mb-2">Balances (Lifetime)</h2>
             <div className="grid grid-cols-3 gap-2">
               {Object.keys(lifetime).map((cur) => (
-                <div key={`life-${cur}`} className="card p-3">
+                <div
+                  key={`life-${cur}`}
+                  className={`card p-3 cursor-pointer transition ${
+                    showBreakdown[cur] ? "ring-2 ring-cyan-400 shadow-cyan-400/40 shadow-lg" : "hover:bg-white/10"
+                  }`}
+                  onClick={() =>
+                    setShowBreakdown((prev) => ({
+                      ...prev,
+                      [cur]: !prev[cur],
+                    }))
+                  }
+                >
                   <div className="text-xs text-white/70">{cur}</div>
-                  <div className="fit-amount">{fmt(lifetime[cur] || 0, cur)}</div>
+                  <div className="text-base font-mono">{fmt(lifetime[cur] || 0, cur)}</div>
+                  {showBreakdown[cur] && (
+                    <div className="mt-2 text-xs text-white/80 space-y-1">
+                      {(() => {
+                        const income = txs
+                          .filter((t) => t.currency === cur && t.kind === "income")
+                          .reduce((s, t) => s + Number(t.amount), 0);
+                        const expense = txs
+                          .filter((t) => t.currency === cur && t.kind === "expense")
+                          .reduce((s, t) => s + Number(t.amount), 0);
+                        const balance = lifetime[cur] || 0;
+                        return (
+                          <>
+                            <div>Income: {fmt(income, cur)}</div>
+                            <div>Expense: {fmt(expense, cur)}</div>
+                            <div>Net: {fmt(balance, cur)}</div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
+
           <div className="card">
             <h2 className="font-semibold mb-2">Balances (This month)</h2>
             <div className="grid grid-cols-3 gap-2">
               {Object.keys(monthly).map((cur) => (
                 <div key={`mon-${cur}`} className="card p-3">
                   <div className="text-xs text-white/70">{cur}</div>
-                  <div className="fit-amount">{fmt(monthly[cur] || 0, cur)}</div>
+                  <div className="text-base font-mono">{fmt(monthly[cur] || 0, cur)}</div>
                 </div>
               ))}
             </div>
@@ -327,17 +388,14 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
+
         <div className="grid md:grid-cols-2 gap-4">
           <div className="card">
-            <h3 className="font-semibold mb-3">
-              Expenses by Category ({chartCurrency})
-            </h3>
+            <h3 className="font-semibold mb-3">Expenses by Category ({chartCurrency})</h3>
             <Doughnut data={donut} />
           </div>
           <div className="card">
-            <h3 className="font-semibold mb-3">
-              Income vs Expense ({chartCurrency})
-            </h3>
+            <h3 className="font-semibold mb-3">Income vs Expense ({chartCurrency})</h3>
             <Bar data={bar} />
           </div>
         </div>
@@ -392,20 +450,13 @@ export default function DashboardPage() {
               addTx(new FormData(e.currentTarget));
               (e.currentTarget as HTMLFormElement).reset();
             }}
-            className="grid md:grid-cols-7 gap-2"
+            className="grid md:grid-cols-8 gap-2"
           >
             <select name="kind" className="input">
               <option value="income">Income</option>
               <option value="expense">Expense</option>
             </select>
-            <input
-              name="amount"
-              type="number"
-              step="0.01"
-              placeholder="Amount"
-              required
-              className="input"
-            />
+            <input name="amount" type="number" step="0.01" placeholder="Amount" required className="input" />
             <select name="currency" className="input">
               <option>SSP</option>
               <option>USD</option>
@@ -489,9 +540,7 @@ export default function DashboardPage() {
                           <input
                             type="date"
                             value={editDraft.tx_date}
-                            onChange={(e) =>
-                              setEditDraft({ ...editDraft, tx_date: e.target.value })
-                            }
+                            onChange={(e) => setEditDraft({ ...editDraft, tx_date: e.target.value })}
                             className="input"
                           />
                         </td>
@@ -513,7 +562,7 @@ export default function DashboardPage() {
                         <td>
                           <input
                             type="number"
-                            value={editDraft.amount}
+                            value={editDraft.amount as number}
                             onChange={(e) =>
                               setEditDraft({ ...editDraft, amount: Number(e.target.value) })
                             }
@@ -567,17 +616,12 @@ export default function DashboardPage() {
                           <input
                             type="text"
                             value={editDraft.note ?? ""}
-                            onChange={(e) =>
-                              setEditDraft({ ...editDraft, note: e.target.value })
-                            }
+                            onChange={(e) => setEditDraft({ ...editDraft, note: e.target.value })}
                             className="input"
                           />
                         </td>
-                        <td>
-                          <button
-                            className="btn bg-cyan-600 mr-2"
-                            onClick={saveEdit}
-                          >
+                        <td className="whitespace-nowrap">
+                          <button className="btn bg-cyan-600 mr-2" onClick={saveEdit}>
                             Save
                           </button>
                           <button
@@ -599,11 +643,7 @@ export default function DashboardPage() {
           </table>
 
           <div className="flex justify-between mt-2 text-sm">
-            <button
-              disabled={page === 0}
-              onClick={() => setPage(page - 1)}
-              className="btn"
-            >
+            <button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn">
               Previous
             </button>
             <button
@@ -616,13 +656,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {toast && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            onClose={() => setToast(null)}
-          />
-        )}
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </RequireAuth>
   );
