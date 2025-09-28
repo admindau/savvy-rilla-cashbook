@@ -71,18 +71,24 @@ export default function BudgetsPage() {
     const { data: cData } = await supabase.from("categories").select("*");
     setCats(cData || []);
 
+    // calculate start and end of month
+    const start = month + "-01";
+    const end = new Date(
+      new Date(start).getFullYear(),
+      new Date(start).getMonth() + 1,
+      0
+    )
+      .toISOString()
+      .slice(0, 10);
+
     const { data: bData } = await supabase
       .from("budgets")
       .select("*")
       .eq("user_id", user_id)
-      .gte("month", month + "-01")
-      .lte("month", month + "-31");
-    setBudgets(bData || []);
+      .gte("month", start)
+      .lte("month", end);
 
-    const start = month + "-01";
-    const end = new Date(new Date(start).getFullYear(), new Date(start).getMonth() + 1, 0)
-      .toISOString()
-      .slice(0, 10);
+    setBudgets(bData || []);
 
     const { data: tData } = await supabase
       .from("transactions")
