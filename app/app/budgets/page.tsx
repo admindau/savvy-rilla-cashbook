@@ -142,6 +142,17 @@ export default function BudgetsPage() {
     load();
   };
 
+  // Trigger warning toasts for over-limit budgets
+  useEffect(() => {
+    budgets.forEach((b) => {
+      const spent = progress[b.category_id] || 0;
+      if (spent > b.limit_amount) {
+        const cat = cats.find((c) => c.id === b.category_id)?.name ?? "—";
+        setToast({ message: `⚠️ Over budget in ${cat}`, type: "warning" });
+      }
+    });
+  }, [budgets, progress, cats]);
+
   const byCategory: Record<string, number> = {};
   budgets.forEach((b) => {
     byCategory[b.category_id] = convert(progress[b.category_id] || 0, b.currency, chartCurrency);
@@ -276,11 +287,6 @@ export default function BudgetsPage() {
                           style={{ width: `${Math.min(100, pct)}%` }}
                         />
                       </div>
-                      {over &&
-                        setToast({
-                          message: `⚠️ Over budget in ${cat}`,
-                          type: "warning",
-                        })}
                     </td>
                     <td>
                       <button
