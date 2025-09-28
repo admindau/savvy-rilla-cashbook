@@ -2,10 +2,10 @@
 
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
-import { fmt } from "@/lib/format";
 import Toast from "@/components/Toast";
-import { useEffect, useMemo, useState, FormEvent } from "react";
+import { fmt } from "@/lib/format";
 import { useFxRates } from "@/lib/useFxRates";
+import { useEffect, useState, FormEvent } from "react";
 
 import { Doughnut, Bar } from "react-chartjs-2";
 import {
@@ -19,271 +19,165 @@ import {
 } from "chart.js";
 Chart.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
+type Account = { id: string; name: string; currency: string };
+type Category = { id: string; name: string; kind: "income" | "expense" };
 type Tx = {
   id: string;
+  account_id: string;
+  category_id: string;
   amount: number;
+  currency: string;
   kind: "income" | "expense";
-  currency: "SSP" | "USD" | "KES" | string;
-  category_id: string | null;
-  account_id: string | null;
   tx_date: string;
-  note: string | null;
-  user_id?: string;
+  note?: string;
 };
-type Category = { id: string; name: string; kind?: "income" | "expense" };
-type Account = { id: string; name: string; currency: "SSP" | "USD" | "KES" | string };
-
-const palette = [
-  "#22d3ee",
-  "#a78bfa",
-  "#fb7185",
-  "#34d399",
-  "#f59e0b",
-  "#f472b6",
-  "#84cc16",
-  "#e879f9",
-  "#f97316",
-  "#60a5fa",
-  "#10b981",
-  "#f43f5e",
-];
 
 export default function DashboardPage() {
   const { convert, loading } = useFxRates();
 
-  const [txs, setTxs] = useState<Tx[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
-  const [accts, setAccts] = useState<Account[]>([]);
-
-  const [page, setPage] = useState(0);
-  const [query, setQuery] = useState("");
-  const pageSize = 50;
-
+  const [txs, setTxs] = useState<Tx[]>([]);
   const [lifetime, setLifetime] = useState<Record<string, number>>({});
   const [monthly, setMonthly] = useState<Record<string, number>>({});
-  const [showBreakdown, setShowBreakdown] = useState<Record<string, boolean>>({});
-
   const [chartCurrency, setChartCurrency] = useState<"USD" | "SSP" | "KES">("SSP");
   const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<Tx>>({});
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = async (pageArg = page, queryArg = query) => {
+  const load = async () => {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
     if (!user_id) return;
 
-    const [{ data: cData }, { data: aData }] = await Promise.all([
-      supabase.from("categories").select("*"),
-      supabase.from("accounts").select("*").eq("user_id", user_id),
-    ]);
-    setCats(cData || []);
-    setAccts(aData || []);
+    const { data: aData } = await supabase.from("accounts").select("*").eq("user_id", user_id);
+    setAccounts(aData || []);
 
-    let q = supabase
+    const { data: cData } = await supabase.from("categories").select("*");
+    setCats(cData || []);
+
+    const { data: tData } = await supabase
       .from("transactions")
       .select("*")
       .eq("user_id", user_id)
       .order("tx_date", { ascending: false })
-      .range(pageArg * pageSize, pageArg * pageSize + pageSize - 1);
-
-    if (queryArg) {
-      const matchCats = (cData || []).filter((c) =>
-        c.name.toLowerCase().includes(queryArg.toLowerCase())
-      );
-      const catIds = matchCats.map((c) => c.id);
-      if (catIds.length > 0) {
-        q = q.in("category_id", catIds);
-      } else {
-        q = q.or(
-          `note.ilike.%${queryArg}%,currency.ilike.%${queryArg}%`
-        );
-      }
-    }
-
-    const { data: tData } = await q;
+      .limit(50);
     setTxs(tData || []);
 
-    const cur = new Date();
-    const start = new Date(cur.getFullYear(), cur.getMonth(), 1).toISOString().slice(0, 10);
-    const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).toISOString().slice(0, 10);
-
-    const { data: allTx } = await supabase
-      .from("transactions")
-      .select("amount,currency,kind")
-      .eq("user_id", user_id);
+    // compute balances
     const life: Record<string, number> = {};
-    (allTx || []).forEach((t) => {
-      life[t.currency] = life[t.currency] || 0;
-      life[t.currency] += t.kind === "income" ? Number(t.amount) : -Number(t.amount);
+    (tData || []).forEach((t) => {
+      life[t.currency] = (life[t.currency] || 0) + Number(t.amount) * (t.kind === "income" ? 1 : -1);
     });
     setLifetime(life);
 
-    const { data: monthTx } = await supabase
-      .from("transactions")
-      .select("amount,currency,kind,tx_date")
-      .eq("user_id", user_id)
-      .gte("tx_date", start)
-      .lte("tx_date", end);
-    const mon: Record<string, number> = {};
-    (monthTx || []).forEach((t) => {
-      mon[t.currency] = mon[t.currency] || 0;
-      mon[t.currency] += t.kind === "income" ? Number(t.amount) : -Number(t.amount);
-    });
-    setMonthly(mon);
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const monthAgg: Record<string, number> = {};
+    (tData || [])
+      .filter((t) => t.tx_date.startsWith(thisMonth))
+      .forEach((t) => {
+        monthAgg[t.currency] =
+          (monthAgg[t.currency] || 0) + Number(t.amount) * (t.kind === "income" ? 1 : -1);
+      });
+    setMonthly(monthAgg);
   };
 
   useEffect(() => {
-    load(0, "");
+    load();
   }, []);
-  useEffect(() => {
-    load(page, query);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query]);
-
-  const calcBreakdown = (currency: string) => {
-    const income = txs
-      .filter((t) => t.currency === currency && t.kind === "income")
-      .reduce((s, t) => s + Number(t.amount), 0);
-    const expense = txs
-      .filter((t) => t.currency === currency && t.kind === "expense")
-      .reduce((s, t) => s + Number(t.amount), 0);
-    const balance = lifetime[currency] || 0;
-    return { income, expense, balance };
-  };
-
-  const byCategory: Record<string, number> = useMemo(() => {
-    const agg: Record<string, number> = {};
-    txs.forEach((t) => {
-      if (t.kind === "expense" && t.category_id) {
-        agg[t.category_id] =
-          (agg[t.category_id] || 0) + convert(Number(t.amount), t.currency, chartCurrency);
-      }
-    });
-    return agg;
-  }, [txs, chartCurrency, convert]);
-
-  const donut = useMemo(
-    () => ({
-      labels: Object.keys(byCategory).map(
-        (id) => cats.find((c) => c.id === id)?.name ?? "—"
-      ),
-      datasets: [{ data: Object.values(byCategory), backgroundColor: palette }],
-    }),
-    [byCategory, cats]
-  );
-
-  const byCurrency: Record<string, { income: number; expense: number }> = useMemo(() => {
-    const agg: Record<string, { income: number; expense: number }> = {};
-    txs.forEach((t) => {
-      if (!agg[t.currency]) agg[t.currency] = { income: 0, expense: 0 };
-      agg[t.currency][t.kind === "income" ? "income" : "expense"] += Number(t.amount);
-    });
-    return agg;
-  }, [txs]);
-
-  const bar = useMemo(
-    () => ({
-      labels: Object.keys(byCurrency),
-      datasets: [
-        {
-          label: "Income",
-          data: Object.entries(byCurrency).map(([cur, v]) => convert(v.income, cur, chartCurrency)),
-          backgroundColor: "#22c55e",
-        },
-        {
-          label: "Expense",
-          data: Object.entries(byCurrency).map(([cur, v]) =>
-            convert(v.expense, cur, chartCurrency)
-          ),
-          backgroundColor: "#ef4444",
-        },
-      ],
-    }),
-    [byCurrency, chartCurrency, convert]
-  );
 
   const addAccount = async (fd: FormData) => {
     const { data: userData } = await supabase.auth.getUser();
-    const user_id = userData?.user?.id;
     const { error } = await supabase.from("accounts").insert([
       {
-        user_id,
+        user_id: userData?.user?.id,
         name: String(fd.get("name")),
         currency: String(fd.get("currency")),
       },
     ]);
     if (error) setToast({ message: error.message, type: "error" });
-    else setToast({ message: "✅ Account created" });
-    load(page, query);
+    else setToast({ message: "✅ Account created", type: "success" });
+    load();
   };
 
   const addCategory = async (fd: FormData) => {
+    const { data: userData } = await supabase.auth.getUser();
     const { error } = await supabase.from("categories").insert([
       {
+        user_id: userData?.user?.id,
         name: String(fd.get("name")),
-        kind: String(fd.get("kind")) as "income" | "expense",
+        kind: String(fd.get("kind")),
       },
     ]);
     if (error) setToast({ message: error.message, type: "error" });
-    else setToast({ message: "✅ Category created" });
-    load(page, query);
+    else setToast({ message: "✅ Category created", type: "success" });
+    load();
   };
 
   const addTx = async (fd: FormData) => {
     const { data: userData } = await supabase.auth.getUser();
-    const user_id = userData?.user?.id;
     const { error } = await supabase.from("transactions").insert([
       {
-        user_id,
-        account_id: String(fd.get("account_id") || ""),
-        category_id: String(fd.get("category_id") || ""),
-        kind: String(fd.get("kind")) as "income" | "expense",
+        user_id: userData?.user?.id,
+        account_id: String(fd.get("account_id")),
+        category_id: String(fd.get("category_id")),
         amount: Number(fd.get("amount")),
         currency: String(fd.get("currency")),
+        kind: String(fd.get("kind")) as "income" | "expense",
         tx_date: String(fd.get("tx_date")),
         note: String(fd.get("note") || ""),
       },
     ]);
     if (error) setToast({ message: error.message, type: "error" });
-    else setToast({ message: "✅ Transaction created" });
-    load(page, query);
-  };
-
-  const saveEdit = async () => {
-    if (!editingId) return;
-    const { data: userData } = await supabase.auth.getUser();
-    const user_id = userData?.user?.id;
-    const { error } = await supabase
-      .from("transactions")
-      .update({
-        user_id,
-        account_id: String(editDraft.account_id),
-        category_id: String(editDraft.category_id),
-        kind: editDraft.kind as "income" | "expense",
-        amount: Number(editDraft.amount),
-        currency: String(editDraft.currency),
-        tx_date: String(editDraft.tx_date),
-        note: String(editDraft.note || ""),
-      })
-      .eq("id", editingId)
-      .eq("user_id", user_id);
-    if (error) setToast({ message: error.message, type: "error" });
-    else setToast({ message: "✏️ Transaction updated" });
-    setEditingId(null);
-    setEditDraft({});
-    load(page, query);
+    else setToast({ message: "✅ Transaction created", type: "success" });
+    load();
   };
 
   const delTx = async (id: string) => {
-    if (!confirm("Delete this transaction?")) return;
-    const { data: userData } = await supabase.auth.getUser();
-    const user_id = userData?.user?.id;
-    const { error } = await supabase.from("transactions").delete().eq("id", id).eq("user_id", user_id);
+    const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) setToast({ message: error.message, type: "error" });
-    else setToast({ message: "🗑️ Transaction deleted" });
-    load(page, query);
+    else setToast({ message: "🗑️ Transaction deleted", type: "success" });
+    load();
+  };
+
+  // Chart data
+  const byCategory: Record<string, number> = {};
+  txs.forEach((t) => {
+    if (t.kind === "expense" && t.category_id) {
+      byCategory[t.category_id] =
+        (byCategory[t.category_id] || 0) + convert(Number(t.amount), t.currency, chartCurrency);
+    }
+  });
+
+  const donut = {
+    labels: Object.keys(byCategory).map(
+      (id) => cats.find((c) => c.id === id)?.name ?? "—"
+    ),
+    datasets: [{ data: Object.values(byCategory), backgroundColor: ["#22d3ee", "#a78bfa", "#fb7185", "#34d399", "#f59e0b", "#f472b6", "#84cc16"] }],
+  };
+
+  const bar = {
+    labels: ["Income", "Expense"],
+    datasets: [
+      {
+        label: "Income",
+        data: [
+          txs
+            .filter((t) => t.kind === "income")
+            .reduce((s, t) => s + convert(Number(t.amount), t.currency, chartCurrency), 0),
+        ],
+        backgroundColor: "#22c55e",
+      },
+      {
+        label: "Expense",
+        data: [
+          txs
+            .filter((t) => t.kind === "expense")
+            .reduce((s, t) => s + convert(Number(t.amount), t.currency, chartCurrency), 0),
+        ],
+        backgroundColor: "#ef4444",
+      },
+    ],
   };
 
   if (loading) {
@@ -295,7 +189,7 @@ export default function DashboardPage() {
             <div className="absolute inset-0 w-20 h-20 rounded-full border border-cyan-400 animate-[pulse_1.8s_ease-in-out_infinite]" />
           </div>
           <div className="mt-6 text-cyan-300 tracking-widest">
-            ⚡ Initializing Futuristic Cashbook…
+            ⚡ Initializing Futuristic Dashboard…
           </div>
         </div>
       </RequireAuth>
@@ -305,78 +199,50 @@ export default function DashboardPage() {
   return (
     <RequireAuth>
       <div className="grid gap-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <input
-            className="input max-w-md"
-            placeholder="🔍 Search by category, currency or note..."
-            value={query}
-            onChange={(e) => {
-              setPage(0);
-              setQuery(e.target.value);
-            }}
-          />
-        </div>
-
         {/* Balances */}
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="card">
-            <h2 className="font-semibold mb-2">Balances (Lifetime)</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.keys(lifetime).map((cur) => (
-                <div
-                  key={`life-${cur}`}
-                  className={`card p-3 cursor-pointer transition ${
-                    showBreakdown[cur] ? "ring-2 ring-cyan-400 shadow-cyan-400/40 shadow-lg" : "hover:bg-white/10"
-                  }`}
-                  onClick={() =>
-                    setShowBreakdown((prev) => ({
-                      ...prev,
-                      [cur]: !prev[cur],
-                    }))
-                  }
-                >
-                  <div className="text-xs text-white/70">{cur}</div>
-                  <div className="text-base font-mono">{fmt(lifetime[cur] || 0, cur)}</div>
-                  {showBreakdown[cur] && (
-                    <div className="mt-2 text-xs text-white/80 space-y-1">
-                      {(() => {
-                        const income = txs
-                          .filter((t) => t.currency === cur && t.kind === "income")
-                          .reduce((s, t) => s + Number(t.amount), 0);
-                        const expense = txs
-                          .filter((t) => t.currency === cur && t.kind === "expense")
-                          .reduce((s, t) => s + Number(t.amount), 0);
-                        const balance = lifetime[cur] || 0;
-                        return (
-                          <>
-                            <div>Income: {fmt(income, cur)}</div>
-                            <div>Expense: {fmt(expense, cur)}</div>
-                            <div>Net: {fmt(balance, cur)}</div>
-                          </>
-                        );
-                      })()}
+          {[
+            { title: "Balances (Lifetime)", data: lifetime },
+            { title: "Balances (This month)", data: monthly },
+          ].map((section) => (
+            <div
+              key={section.title}
+              className={`card cursor-pointer transition ${
+                expanded === section.title
+                  ? "ring-2 ring-cyan-400 shadow-lg shadow-cyan-400/40"
+                  : "hover:bg-white/10"
+              }`}
+              onClick={() =>
+                setExpanded(expanded === section.title ? null : section.title)
+              }
+            >
+              <h2 className="font-semibold mb-2">{section.title}</h2>
+              <div className="overflow-x-auto">
+                <div className="grid grid-cols-3 gap-2 min-w-[300px]">
+                  {Object.keys(section.data).map((cur) => (
+                    <div key={cur} className="card p-3">
+                      <div className="text-xs text-white/70">{cur}</div>
+                      <div className="truncate text-sm sm:text-base md:text-lg font-mono">
+                        {fmt(section.data[cur] || 0, cur)}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="card">
-            <h2 className="font-semibold mb-2">Balances (This month)</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.keys(monthly).map((cur) => (
-                <div key={`mon-${cur}`} className="card p-3">
-                  <div className="text-xs text-white/70">{cur}</div>
-                  <div className="text-base font-mono">{fmt(monthly[cur] || 0, cur)}</div>
+              </div>
+              {expanded === section.title && (
+                <div className="text-sm text-white/80 mt-2">
+                  {Object.keys(section.data).map((cur) => (
+                    <div key={cur} className="mb-1">
+                      <strong>{cur}</strong>: {fmt(section.data[cur] || 0, cur)}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Charts + FX toggle */}
+        {/* Charts */}
         <div className="flex justify-end gap-2">
           {(["SSP", "USD", "KES"] as const).map((c) => (
             <button
@@ -388,7 +254,6 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
-
         <div className="grid md:grid-cols-2 gap-4">
           <div className="card">
             <h3 className="font-semibold mb-3">Expenses by Category ({chartCurrency})</h3>
@@ -402,7 +267,7 @@ export default function DashboardPage() {
 
         {/* Add Account */}
         <div className="card">
-          <h2 className="font-semibold mb-2">Add Account</h2>
+          <h2 className="font-semibold mb-2">New Account</h2>
           <form
             onSubmit={(e: FormEvent<HTMLFormElement>) => {
               e.preventDefault();
@@ -421,9 +286,9 @@ export default function DashboardPage() {
           </form>
         </div>
 
-        {/* Add Category */}
+        {/* New Category */}
         <div className="card">
-          <h2 className="font-semibold mb-2">Add Category</h2>
+          <h2 className="font-semibold mb-2">New Category</h2>
           <form
             onSubmit={(e: FormEvent<HTMLFormElement>) => {
               e.preventDefault();
@@ -443,29 +308,19 @@ export default function DashboardPage() {
 
         {/* Add Transaction */}
         <div className="card">
-          <h2 className="font-semibold mb-2">Add Transaction</h2>
+          <h2 className="font-semibold mb-2">New Transaction</h2>
           <form
             onSubmit={(e: FormEvent<HTMLFormElement>) => {
               e.preventDefault();
               addTx(new FormData(e.currentTarget));
               (e.currentTarget as HTMLFormElement).reset();
             }}
-            className="grid md:grid-cols-8 gap-2"
+            className="grid md:grid-cols-6 gap-2"
           >
-            <select name="kind" className="input">
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-            </select>
-            <input name="amount" type="number" step="0.01" placeholder="Amount" required className="input" />
-            <select name="currency" className="input">
-              <option>SSP</option>
-              <option>USD</option>
-              <option>KES</option>
-            </select>
             <select name="account_id" className="input">
-              {accts.map((a) => (
+              {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({a.currency})
+                  {a.name}
                 </option>
               ))}
             </select>
@@ -476,9 +331,19 @@ export default function DashboardPage() {
                 </option>
               ))}
             </select>
+            <input name="amount" type="number" step="0.01" placeholder="Amount" required className="input" />
+            <select name="currency" className="input">
+              <option>SSP</option>
+              <option>USD</option>
+              <option>KES</option>
+            </select>
+            <select name="kind" className="input">
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+            </select>
             <input name="tx_date" type="date" required className="input" />
-            <input name="note" placeholder="Note (optional)" className="input md:col-span-2" />
-            <button className="btn md:col-span-1">Save</button>
+            <input name="note" placeholder="Note (optional)" className="input md:col-span-6" />
+            <button className="btn md:col-span-6">Save</button>
           </form>
         </div>
 
@@ -488,172 +353,42 @@ export default function DashboardPage() {
           <table className="w-full text-sm">
             <thead className="text-white/70">
               <tr>
-                <th>Date</th>
-                <th>Kind</th>
+                <th>Account</th>
+                <th>Category</th>
                 <th>Amount</th>
                 <th>Currency</th>
-                <th>Category</th>
-                <th>Account</th>
+                <th>Kind</th>
+                <th>Date</th>
                 <th>Note</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {txs.map((t) => {
+                const acc = accounts.find((a) => a.id === t.account_id)?.name ?? "—";
                 const cat = cats.find((c) => c.id === t.category_id)?.name ?? "—";
-                const acc = accts.find((a) => a.id === t.account_id)?.name ?? "—";
-                const isEditing = editingId === t.id;
                 return (
                   <tr key={t.id} className="border-t border-white/10">
-                    {!isEditing ? (
-                      <>
-                        <td>{t.tx_date}</td>
-                        <td className={t.kind === "income" ? "text-green-400" : "text-red-400"}>
-                          {t.kind}
-                        </td>
-                        <td>{fmt(Number(t.amount), t.currency)}</td>
-                        <td>{t.currency}</td>
-                        <td>{cat}</td>
-                        <td>{acc}</td>
-                        <td>{t.note ?? "—"}</td>
-                        <td>
-                          <button
-                            className="text-cyan-400 hover:underline mr-2"
-                            onClick={() => {
-                              setEditingId(t.id);
-                              setEditDraft(t);
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="text-red-400 hover:underline"
-                            onClick={() => delTx(t.id)}
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td>
-                          <input
-                            type="date"
-                            value={editDraft.tx_date}
-                            onChange={(e) => setEditDraft({ ...editDraft, tx_date: e.target.value })}
-                            className="input"
-                          />
-                        </td>
-                        <td>
-                          <select
-                            value={editDraft.kind}
-                            onChange={(e) =>
-                              setEditDraft({
-                                ...editDraft,
-                                kind: e.target.value as "income" | "expense",
-                              })
-                            }
-                            className="input"
-                          >
-                            <option value="income">Income</option>
-                            <option value="expense">Expense</option>
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            value={editDraft.amount as number}
-                            onChange={(e) =>
-                              setEditDraft({ ...editDraft, amount: Number(e.target.value) })
-                            }
-                            className="input"
-                          />
-                        </td>
-                        <td>
-                          <select
-                            value={editDraft.currency}
-                            onChange={(e) =>
-                              setEditDraft({ ...editDraft, currency: e.target.value })
-                            }
-                            className="input"
-                          >
-                            <option>SSP</option>
-                            <option>USD</option>
-                            <option>KES</option>
-                          </select>
-                        </td>
-                        <td>
-                          <select
-                            value={editDraft.category_id ?? ""}
-                            onChange={(e) =>
-                              setEditDraft({ ...editDraft, category_id: e.target.value })
-                            }
-                            className="input"
-                          >
-                            {cats.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <select
-                            value={editDraft.account_id ?? ""}
-                            onChange={(e) =>
-                              setEditDraft({ ...editDraft, account_id: e.target.value })
-                            }
-                            className="input"
-                          >
-                            {accts.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={editDraft.note ?? ""}
-                            onChange={(e) => setEditDraft({ ...editDraft, note: e.target.value })}
-                            className="input"
-                          />
-                        </td>
-                        <td className="whitespace-nowrap">
-                          <button className="btn bg-cyan-600 mr-2" onClick={saveEdit}>
-                            Save
-                          </button>
-                          <button
-                            className="btn bg-gray-600"
-                            onClick={() => {
-                              setEditingId(null);
-                              setEditDraft({});
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </td>
-                      </>
-                    )}
+                    <td>{acc}</td>
+                    <td>{cat}</td>
+                    <td>{fmt(t.amount, t.currency)}</td>
+                    <td>{t.currency}</td>
+                    <td>{t.kind}</td>
+                    <td>{t.tx_date}</td>
+                    <td>{t.note || "—"}</td>
+                    <td>
+                      <button
+                        className="text-red-400 hover:underline"
+                        onClick={() => delTx(t.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-
-          <div className="flex justify-between mt-2 text-sm">
-            <button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn">
-              Previous
-            </button>
-            <button
-              disabled={txs.length < pageSize}
-              onClick={() => setPage(page + 1)}
-              className="btn"
-            >
-              Next
-            </button>
-          </div>
         </div>
 
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
