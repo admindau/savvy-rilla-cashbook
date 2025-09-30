@@ -3,48 +3,45 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
 
+type FxRate = {
+  base: string;
+  target: string;
+  rate: number;
+};
+
 export function useFxRates() {
-  const [usdToSsp, setUsdToSsp] = useState(6000);
-  const [kesToSsp, setKesToSsp] = useState(46.5);
+  const [rates, setRates] = useState<FxRate[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadRates = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const user_id = userData?.user?.id;
-      if (!user_id) {
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("fx")
-        .select("*")
-        .eq("user_id", user_id)
-        .single();
-
-      if (!error && data) {
-        setUsdToSsp(Number(data.usd_to_ssp));
-        setKesToSsp(Number(data.kes_to_ssp));
-      }
-      setLoading(false);
-    };
-
-    loadRates();
-  }, []);
-
-  const convert = (amount: number, from: string, to: "USD" | "SSP" | "KES") => {
-    const ssp =
-      from === "USD"
-        ? amount * usdToSsp
-        : from === "KES"
-        ? amount * kesToSsp
-        : amount;
-    if (to === "SSP") return ssp;
-    if (to === "USD") return ssp / usdToSsp;
-    if (to === "KES") return ssp / kesToSsp;
-    return ssp;
+  // load rates from Supabase
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("fx").select("*");
+    if (!error && data) setRates(data as FxRate[]);
+    setLoading(false);
   };
 
-  return { usdToSsp, kesToSsp, loading, convert };
+  useEffect(() => {
+    load();
+  }, []);
+
+  /**
+   * Convert an amount from one currency to another
+   * If no direct pair is found, it falls back to returning the original amount.
+   */
+  const convert = (amount: number, from: string, to: string) => {
+    if (from === to) return amount;
+
+    const rate = rates.find((r) => r.base === from && r.target === to);
+    if (rate) return amount * Number(rate.rate);
+
+    // if inverse exists (to→from), invert the rate
+    const inverse = rates.find((r) => r.base === to && r.target === from);
+    if (inverse) return amount / Number(inverse.rate);
+
+    // fallback: no conversion found
+    return amount;
+  };
+
+  return { convert, rates, loading, reload: load };
 }
