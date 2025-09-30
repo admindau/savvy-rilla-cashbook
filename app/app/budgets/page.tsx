@@ -64,19 +64,36 @@ export default function BudgetsPage() {
   const [editDraft, setEditDraft] = useState<Partial<Budget>>({});
 
   const load = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    const user_id = userData?.user?.id;
-    if (!user_id) return;
+  const { data: userData } = await supabase.auth.getUser();
+  const user_id = userData?.user?.id;
+  if (!user_id) return;
 
-    const { data: userData } = await supabase.auth.getUser();
-const user_id = userData?.user?.id;
+  // fetch both global + personal categories
+  const { data: cData } = await supabase
+    .from("categories")
+    .select("*")
+    .or(`user_id.eq.${user_id},user_id.is.null`);
 
-const { data: cData } = await supabase
-  .from("categories")
-  .select("*")
-  .or(`user_id.eq.${user_id},user_id.is.null`);
+  setCats(cData || []);
 
-setCats(cData || []);
+  // calculate start and end of month
+  const start = month + "-01";
+  const end = new Date(
+    new Date(start).getFullYear(),
+    new Date(start).getMonth() + 1,
+    0
+  )
+    .toISOString()
+    .slice(0, 10);
+
+  const { data: bData } = await supabase
+    .from("budgets")
+    .select("*")
+    .eq("user_id", user_id)
+    .gte("month", start)
+    .lte("month", end);
+
+  setBudgets(bData || []);
 
     // calculate start and end of month
     const start = month + "-01";
