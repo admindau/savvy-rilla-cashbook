@@ -137,9 +137,25 @@ export default function BudgetsPage() {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    const { error } = await supabase.from("budgets").update(editDraft).eq("id", editingId);
+
+    const { data: userData } = await supabase.auth.getUser();
+    const user_id = userData?.user?.id;
+    if (!user_id) return;
+
+    const updated = {
+      ...editDraft,
+      user_id, // ensure user_id is always set
+    };
+
+    const { error } = await supabase
+      .from("budgets")
+      .update(updated)
+      .eq("id", editingId)
+      .eq("user_id", user_id);
+
     if (error) setToast({ message: error.message, type: "error" });
     else setToast({ message: "✏️ Budget updated", type: "success" });
+
     setEditingId(null);
     setEditDraft({});
     load();
