@@ -238,13 +238,11 @@ export default function BudgetsPage() {
             className="grid md:grid-cols-4 gap-2"
           >
             <select name="category_id" className="input">
-              {cats
-                .filter((c) => c.kind === "expense")
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
             <input
               name="limit_amount"
