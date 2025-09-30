@@ -1,47 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 
-type FxRate = {
-  base: string;
-  target: string;
-  rate: number;
-};
-
+/**
+ * Last working version:
+ * - Hardcoded base rates
+ * - $1 = 6000 SSP
+ * - 1 KES = 46.5 SSP
+ * - Conversion works correctly across charts
+ */
 export function useFxRates() {
-  const [rates, setRates] = useState<FxRate[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // load rates from Supabase
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("fx").select("*");
-    if (!error && data) setRates(data as FxRate[]);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  /**
-   * Convert an amount from one currency to another
-   * If no direct pair is found, it falls back to returning the original amount.
-   */
-  const convert = (amount: number, from: string, to: string) => {
+  const convert = (amount: number, from: string, to: string): number => {
     if (from === to) return amount;
 
-    const rate = rates.find((r) => r.base === from && r.target === to);
-    if (rate) return amount * Number(rate.rate);
+    // convert everything into SSP first
+    let inSSP = 0;
+    if (from === "USD") inSSP = amount * 6000;
+    else if (from === "KES") inSSP = amount * 46.5;
+    else inSSP = amount; // already SSP
 
-    // if inverse exists (to→from), invert the rate
-    const inverse = rates.find((r) => r.base === to && r.target === from);
-    if (inverse) return amount / Number(inverse.rate);
-
-    // fallback: no conversion found
-    return amount;
+    // convert SSP into target
+    if (to === "USD") return inSSP / 6000;
+    if (to === "KES") return inSSP / 46.5;
+    return inSSP; // SSP
   };
 
-  return { convert, rates, loading, reload: load };
+  return { convert, loading };
 }
