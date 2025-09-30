@@ -1,45 +1,46 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
 
-export default function HeaderRight({ user }: { user: any }) {
-  const [open, setOpen] = useState(false);
+export default function HeaderRight() {
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setEmail(data.user?.email || null);
+    };
+    getUser();
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    window.location.href = "/";
+    window.location.href = "/"; // redirect home
   };
 
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1 rounded hover:bg-white/10"
-      >
-        <span className="text-sm">{user?.email}</span>
-        <span className="material-icons">account_circle</span>
-      </button>
+  if (!email) return null;
 
-      {open && (
-        <div className="absolute right-0 mt-2 w-48 bg-black border border-white/10 rounded shadow-lg">
-          <div className="px-3 py-2 text-white/70 text-xs">Profile</div>
-          <Link
-            href="/app/profile/fx"
-            className="block px-3 py-2 hover:bg-white/10"
-            onClick={() => setOpen(false)}
-          >
-            FX
-          </Link>
-          <button
-            onClick={signOut}
-            className="w-full text-left px-3 py-2 hover:bg-white/10"
-          >
-            Sign out
-          </button>
-        </div>
-      )}
+  return (
+    <div className="relative group">
+      <button className="px-3 py-1 rounded hover:bg-white/10">
+        {email}
+      </button>
+      <div className="absolute right-0 mt-2 w-40 bg-neutral-900 border border-white/10 rounded shadow-lg hidden group-hover:block">
+        <Link
+          href="/app/profile/fx"
+          className="block px-4 py-2 hover:bg-white/10"
+        >
+          FX
+        </Link>
+        <button
+          onClick={signOut}
+          className="block w-full text-left px-4 py-2 hover:bg-white/10"
+        >
+          Logout
+        </button>
+      </div>
     </div>
   );
 }

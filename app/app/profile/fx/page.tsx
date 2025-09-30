@@ -2,65 +2,143 @@
 
 import RequireAuth from "@/components/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
-import { useEffect, useState, FormEvent } from "react";
 import Toast from "@/components/Toast";
+import { useEffect, useState, FormEvent } from "react";
+
+type FxRate = {
+  id: string;
+  base: string;
+  target: string;
+  rate: number;
+  user_id?: string;
+};
 
 export default function FxPage() {
-  const [usdToSsp, setUsdToSsp] = useState(6000);
-  const [kesToSsp, setKesToSsp] = useState(46.5);
-  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
+  const [rates, setRates] = useState<FxRate[]>([]);
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(
+    null
+  );
 
-  const loadRates = async () => {
+  const load = async () => {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
-    if (!user_id) return;
 
-    const { data, error } = await supabase.from("fx").select("*").eq("user_id", user_id).single();
-    if (!error && data) {
-      setUsdToSsp(Number(data.usd_to_ssp));
-      setKesToSsp(Number(data.kes_to_ssp));
-    }
-  };
-
-  useEffect(() => { loadRates(); }, []);
-
-  const onSave = async (e: FormEvent) => {
-    e.preventDefault();
-    const { data: userData } = await supabase.auth.getUser();
-    const user_id = userData?.user?.id;
-    if (!user_id) return;
-
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("fx")
-      .upsert({ user_id, usd_to_ssp: usdToSsp, kes_to_ssp: kesToSsp }, { onConflict: "user_id" });
+      .select("*")
+      .eq("user_id", user_id);
 
     if (error) setToast({ message: error.message, type: "error" });
-    else setToast({ message: "✅ FX rates updated", type: "success" });
+    setRates(data || []);
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const addRate = async (fd: FormData) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const user_id = userData?.user?.id;
+
+    const { error } = await supabase.from("fx").upsert([
+      {
+        user_id,
+        base: String(fd.get("base")),
+        target: String(fd.get("target")),
+        rate: Number(fd.get("rate")),
+      },
+    ]);
+
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "✅ Rate saved", type: "success" });
+    load();
+  };
+
+  const delRate = async (id: string) => {
+    if (!confirm("Delete this FX rate?")) return;
+    const { error } = await supabase.from("fx").delete().eq("id", id);
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "🗑️ Rate deleted", type: "success" });
+    load();
   };
 
   return (
     <RequireAuth>
       <div className="grid gap-6">
-        <h1 className="text-2xl font-semibold">FX</h1>
+        <h1 className="text-2xl font-semibold">FX Rates</h1>
+
+        {/* Add Rate */}
         <div className="card">
-          <h2 className="font-semibold mb-2">Manage Exchange Rates</h2>
-          <form onSubmit={onSave} className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-white/70">1 USD in SSP</label>
-              <input type="number" step="0.01" className="input" value={usdToSsp}
-                     onChange={(e) => setUsdToSsp(Number(e.target.value))} />
-            </div>
-            <div>
-              <label className="text-sm text-white/70">1 KES in SSP</label>
-              <input type="number" step="0.01" className="input" value={kesToSsp}
-                     onChange={(e) => setKesToSsp(Number(e.target.value))} />
-            </div>
-            <div className="md:col-span-2">
-              <button type="submit" className="btn w-full">Save Rates</button>
-            </div>
+          <h2 className="font-semibold mb-2">Add / Update Rate</h2>
+          <form
+            onSubmit={(e: FormEvent<HTMLFormElement>) => {
+              e.preventDefault();
+              addRate(new FormData(e.currentTarget));
+              (e.currentTarget as HTMLFormElement).reset();
+            }}
+            className="grid md:grid-cols-4 gap-2"
+          >
+            <select name="base" className="input">
+              <option>USD</option>
+              <option>SSP</option>
+              <option>KES</option>
+            </select>
+            <select name="target" className="input">
+              <option>USD</option>
+              <option>SSP</option>
+              <option>KES</option>
+            </select>
+            <input
+              name="rate"
+              type="number"
+              step="0.01"
+              placeholder="Rate"
+              required
+              className="input"
+            />
+            <button className="btn">Save</button>
           </form>
         </div>
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+        {/* Rates list */}
+        <div className="card overflow-x-auto">
+          <h3 className="font-semibold mb-2">Current Rates</h3>
+          <table className="w-full text-sm">
+            <thead className="text-white/70">
+              <tr>
+                <th>Base</th>
+                <th>Target</th>
+                <th>Rate</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rates.map((r) => (
+                <tr key={r.id} className="border-t border-white/10">
+                  <td>{r.base}</td>
+                  <td>{r.target}</td>
+                  <td>{r.rate}</td>
+                  <td>
+                    <button
+                      className="text-red-400 hover:underline"
+                      onClick={() => delRate(r.id)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
+        )}
       </div>
     </RequireAuth>
   );
