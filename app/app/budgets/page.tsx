@@ -68,8 +68,15 @@ export default function BudgetsPage() {
     const user_id = userData?.user?.id;
     if (!user_id) return;
 
-    const { data: cData } = await supabase.from("categories").select("*");
-    setCats(cData || []);
+    const { data: userData } = await supabase.auth.getUser();
+const user_id = userData?.user?.id;
+
+const { data: cData } = await supabase
+  .from("categories")
+  .select("*")
+  .or(`user_id.eq.${user_id},user_id.is.null`);
+
+setCats(cData || []);
 
     // calculate start and end of month
     const start = month + "-01";
