@@ -182,17 +182,22 @@ export default function DashboardPage() {
     });
     setLifetime(life);
 
-    // compute monthly balances (current month only)
-    const cur = new Date();
-    const start = new Date(cur.getFullYear(), cur.getMonth(), 1).toISOString().slice(0, 10);
-    const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).toISOString().slice(0, 10);
+    // compute monthly balances (current month only, local-safe dates)
+const cur = new Date();
+const year = cur.getFullYear();
+const month = String(cur.getMonth() + 1).padStart(2, "0");
 
-    const { data: monthTx, error: monthErr } = await supabase
-      .from("transactions")
-      .select("amount,currency,kind,tx_date")
-      .eq("user_id", user_id)
-      .gte("tx_date", start)
-      .lte("tx_date", end);
+// First and last day of this month in YYYY-MM-DD format
+const start = `${year}-${month}-01`;
+const lastDay = new Date(year, cur.getMonth() + 1, 0).getDate();
+const end = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+
+const { data: monthTx, error: monthErr } = await supabase
+  .from("transactions")
+  .select("amount,currency,kind,tx_date")
+  .eq("user_id", user_id)
+  .gte("tx_date", start)
+  .lte("tx_date", end);
     if (monthErr) setToast({ message: monthErr.message, type: "error" });
 
     const mon: Record<string, number> = {};
