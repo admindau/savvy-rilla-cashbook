@@ -144,7 +144,7 @@ export default function BudgetsPage() {
 
     const updated = {
       ...editDraft,
-      user_id, // ensure user_id is always set
+      user_id,
     };
 
     const { error } = await supabase
@@ -294,42 +294,110 @@ export default function BudgetsPage() {
             </thead>
             <tbody>
               {budgets.map((b) => {
+                const isEditing = editingId === b.id;
                 const cat = cats.find((c) => c.id === b.category_id)?.name ?? "—";
                 const spent = progress[b.category_id] || 0;
                 const pct = (spent / b.limit_amount) * 100;
                 const over = spent > b.limit_amount;
+
                 return (
                   <tr key={b.id} className="border-t border-white/10">
-                    <td>{cat}</td>
-                    <td>{fmt(b.limit_amount, b.currency)}</td>
-                    <td>{b.currency}</td>
-                    <td>{b.month.slice(0, 7)}</td>
-                    <td>{fmt(spent, b.currency)}</td>
-                    <td>
-                      <div className="w-full bg-white/10 h-2 rounded">
-                        <div
-                          className={`h-2 rounded ${over ? "bg-red-500" : "bg-green-500"}`}
-                          style={{ width: `${Math.min(100, pct)}%` }}
-                        />
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        className="text-cyan-400 hover:underline mr-2"
-                        onClick={() => {
-                          setEditingId(b.id);
-                          setEditDraft(b);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-red-400 hover:underline"
-                        onClick={() => delBudget(b.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
+                    {!isEditing ? (
+                      <>
+                        <td>{cat}</td>
+                        <td>{fmt(b.limit_amount, b.currency)}</td>
+                        <td>{b.currency}</td>
+                        <td>{b.month.slice(0, 7)}</td>
+                        <td>{fmt(spent, b.currency)}</td>
+                        <td>
+                          <div className="w-full bg-white/10 h-2 rounded">
+                            <div
+                              className={`h-2 rounded ${
+                                over ? "bg-red-500" : "bg-green-500"
+                              }`}
+                              style={{ width: `${Math.min(100, pct)}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <button
+                            className="text-cyan-400 hover:underline mr-2"
+                            onClick={() => {
+                              setEditingId(b.id);
+                              setEditDraft(b);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="text-red-400 hover:underline"
+                            onClick={() => delBudget(b.id)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>
+                          <select
+                            value={editDraft.category_id || ""}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, category_id: e.target.value })
+                            }
+                            className="input"
+                          >
+                            {cats.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            value={editDraft.limit_amount ?? 0}
+                            onChange={(e) =>
+                              setEditDraft({
+                                ...editDraft,
+                                limit_amount: Number(e.target.value),
+                              })
+                            }
+                            className="input"
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={editDraft.currency || "SSP"}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, currency: e.target.value })
+                            }
+                            className="input"
+                          >
+                            <option>SSP</option>
+                            <option>USD</option>
+                            <option>KES</option>
+                          </select>
+                        </td>
+                        <td>{b.month.slice(0, 7)}</td>
+                        <td>{fmt(spent, b.currency)}</td>
+                        <td colSpan={2}>
+                          <button className="btn bg-cyan-600 mr-2" onClick={saveEdit}>
+                            Save
+                          </button>
+                          <button
+                            className="btn bg-gray-600"
+                            onClick={() => {
+                              setEditingId(null);
+                              setEditDraft({});
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
