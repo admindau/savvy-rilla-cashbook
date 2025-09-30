@@ -111,8 +111,6 @@ export default function BudgetsPage() {
     setProgress(m);
   };
 
-  };
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
