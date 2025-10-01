@@ -136,7 +136,7 @@ export default function RecurringPage() {
     load();
   };
 
-  // NEW: Apply recurring as transaction
+  // ✅ FIXED: Apply recurring as transaction using start_date
   const applyRule = async (rule: Recurring) => {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
@@ -148,7 +148,7 @@ export default function RecurringPage() {
         category_id: rule.category_id,
         amount: rule.amount,
         currency: rule.currency,
-        date: new Date().toISOString().split("T")[0],
+        date: rule.start_date,   // ✅ now respects the rule’s start_date
         note: rule.note ?? "",
       },
     ]);
@@ -280,7 +280,7 @@ export default function RecurringPage() {
                           >
                             Delete
                           </button>
-                          {/* NEW Apply button */}
+                          {/* Apply button */}
                           <button
                             className="text-green-400 hover:underline"
                             onClick={() => applyRule(r)}
