@@ -19,7 +19,7 @@ type Recurring = {
   frequency: "daily" | "weekly" | "monthly";
   start_date: string;
   next_run: string | null;
-  note: string | null;
+  note?: string | null;
   user_id?: string;
 };
 type Category = { id: string; name: string };
@@ -134,6 +134,27 @@ export default function RecurringPage() {
     if (error) setToast({ message: error.message, type: "error" });
     else setToast({ message: "🗑️ Rule deleted" });
     load();
+  };
+
+  // NEW: Apply recurring as transaction
+  const applyRule = async (rule: Recurring) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const user_id = userData?.user?.id;
+    if (!user_id) return;
+
+    const { error } = await supabase.from("transactions").insert([
+      {
+        user_id,
+        category_id: rule.category_id,
+        amount: rule.amount,
+        currency: rule.currency,
+        date: new Date().toISOString().split("T")[0],
+        note: rule.note ?? "",
+      },
+    ]);
+
+    if (error) setToast({ message: error.message, type: "error" });
+    else setToast({ message: "📌 Recurring applied to transactions" });
   };
 
   // Chart: by category
@@ -254,10 +275,17 @@ export default function RecurringPage() {
                             Edit
                           </button>
                           <button
-                            className="text-red-400 hover:underline"
+                            className="text-red-400 hover:underline mr-2"
                             onClick={() => delRule(r.id)}
                           >
                             Delete
+                          </button>
+                          {/* NEW Apply button */}
+                          <button
+                            className="text-green-400 hover:underline"
+                            onClick={() => applyRule(r)}
+                          >
+                            Apply
                           </button>
                         </td>
                       </>
