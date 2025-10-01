@@ -136,7 +136,7 @@ export default function RecurringPage() {
     load();
   };
 
-  // ✅ FIXED: Apply recurring as transaction using start_date
+  // ✅ FIXED: Apply recurring as transaction using txn_date
   const applyRule = async (rule: Recurring) => {
     const { data: userData } = await supabase.auth.getUser();
     const user_id = userData?.user?.id;
@@ -148,7 +148,7 @@ export default function RecurringPage() {
         category_id: rule.category_id,
         amount: rule.amount,
         currency: rule.currency,
-        date: rule.start_date,   // ✅ now respects the rule’s start_date
+        txn_date: rule.start_date,   // ✅ updated to match DB column name
         note: rule.note ?? "",
       },
     ]);
